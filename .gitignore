@@ -1,0 +1,10 @@
+# Public-safe planner: never commit private exports/imports
+private-data/
+*.private.json
+*_private.json
+family_export*.json
+passport*
+ktn*
+global_entry*
+*.sqlite
+.env
