@@ -1,10 +1,15 @@
-# Public-safe planner: never commit private exports/imports
-private-data/
+# Private local/exported data - do not commit
+private/
+exports/
+imports/
 *.private.json
-*_private.json
-family_export*.json
-passport*
-ktn*
-global_entry*
-*.sqlite
+*.secret.json
 .env
+.env.*
+
+# Identity and sensitive travel docs
+*passport*
+*global-entry*
+*ktn*
+*ticket-number*
+*pnr*
