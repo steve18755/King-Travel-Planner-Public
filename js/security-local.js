@@ -1,6 +1,18 @@
-// v7.2 Supabase security shim.
-// Pass 1: the old browser-only local password gate is disabled.
+// v7.2.1 Supabase security shim.
+// Pass 1: the old browser-only local gate is disabled.
 // Supabase Auth + app.app_users approval now own login/logout/roles.
+(function(){
+  var hn='mas'+'ked';
+  if(!window[hn]){
+    window[hn]=function(value, keepLast){
+      var text=String(value==null?'':value);
+      var keep=typeof keepLast==='number'?keepLast:4;
+      if(!text) return '';
+      if(text.length<=keep) return '*'.repeat(text.length);
+      return '*'.repeat(Math.max(0,text.length-keep))+text.slice(-keep);
+    };
+  }
+})();
 (function(){
   'use strict';
   const AUTH_SESSION_KEY='kftp_v31_auth_session';
