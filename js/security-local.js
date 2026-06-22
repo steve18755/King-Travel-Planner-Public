@@ -1,11 +1,15 @@
-// v7.2 Supabase security shim.
-// Pass 1: the old browser-only local password gate is disabled.
-// Supabase Auth + app.app_users approval now own login/logout/roles.
+// v7.2.8 Supabase security shim.
+// Pass 1 repair: local password gate stays disabled; Supabase Auth owns login/logout/roles.
+// This shim also makes Logout / Switch User a true hard sign-out so Supabase does not auto-restore the session.
 (function(){
   'use strict';
   const AUTH_SESSION_KEY='kftp_v31_auth_session';
   const ADMIN_TABS=['admin','suppliers','vendorcheck','awardworksheet'];
   const $=id=>document.getElementById(id);
+
+  // Keep the legacy dashboard arithmetic placeholder available as early as this file loads.
+  window.masked = window.masked || 86400000;
+  window.account = window.account || 0;
 
   function removeLocalOverlay(){
     const o=$('authOverlay');
@@ -19,6 +23,42 @@
     document.body.insertAdjacentHTML('beforeend',
       `<div id="authOverlay" class="authOverlay"><div class="authCard"><div class="authBrand"><span>🛡️</span><div><h1>King Family Travel Planner</h1><p>Loading secure Supabase login…</p></div></div><p class="muted small">The local prototype password gate has been replaced by Supabase Auth.</p></div></div>`
     );
+  }
+
+  function clearAuthStorage(){
+    try{
+      localStorage.removeItem(AUTH_SESSION_KEY);
+      localStorage.removeItem('kftp_v31_auth_users');
+      localStorage.removeItem('kftp_admin_activity_log_v33');
+      Object.keys(localStorage).forEach(k=>{
+        const x=String(k).toLowerCase();
+        if(x.startsWith('sb-') || x.includes('supabase') || x.includes('gotrue') || x.includes('vguuedcyfzgqbaakhurg')) localStorage.removeItem(k);
+      });
+    }catch(e){}
+    try{
+      sessionStorage.setItem('kftp_force_logout','1');
+      Object.keys(sessionStorage).forEach(k=>{
+        const x=String(k).toLowerCase();
+        if(x.startsWith('sb-') || x.includes('supabase') || x.includes('gotrue') || x.includes('vguuedcyfzgqbaakhurg')) sessionStorage.removeItem(k);
+      });
+    }catch(e){}
+  }
+
+  async function hardLogout(){
+    clearAuthStorage();
+    try{
+      if(window.KFTP_SUPABASE && window.KFTP_SUPABASE.client && window.KFTP_SUPABASE.client.auth){
+        await window.KFTP_SUPABASE.client.auth.signOut({scope:'local'});
+      }else if(window.supabase && window.KFTP_SUPABASE_CONFIG){
+        const c=window.supabase.createClient(window.KFTP_SUPABASE_CONFIG.url, window.KFTP_SUPABASE_CONFIG.anonKey, {auth:{persistSession:true,autoRefreshToken:false}});
+        await c.auth.signOut({scope:'local'});
+      }
+    }catch(e){}
+    clearAuthStorage();
+    const url=new URL(window.location.href);
+    url.hash='';
+    url.searchParams.set('signedout', String(Date.now()));
+    window.location.replace(url.toString());
   }
 
   function session(){
@@ -58,12 +98,8 @@
     }
   }
 
-  async function logout(){
-    if(window.KFTP_SUPABASE && typeof window.KFTP_SUPABASE.signOut==='function'){
-      return window.KFTP_SUPABASE.signOut();
-    }
-    localStorage.removeItem(AUTH_SESSION_KEY);
-    location.reload();
+  function logout(){
+    return hardLogout();
   }
 
   function applyAccess(){
@@ -86,10 +122,25 @@
     }
   }
 
-  window.KFTP_LOCAL_AUTH={applyAccess,isAdmin,currentProfile,logout};
+  // Capture logout/switch clicks before the older inline handlers or cloud-bar handler can reload and restore the session.
+  document.addEventListener('click', function(e){
+    const btn=e.target && e.target.closest ? e.target.closest('button') : null;
+    if(!btn) return;
+    const id=btn.id || '';
+    const txt=(btn.textContent || '').trim().toLowerCase();
+    const inAuthControl = id==='topLogoutBtn' || id==='topSwitchUserBtn' || id==='sbOut' ||
+      (btn.closest && (btn.closest('#topUserBar') || btn.closest('#sbCloudBar')) && (txt==='logout' || txt==='switch user' || txt==='sign out'));
+    if(inAuthControl){
+      e.preventDefault();
+      e.stopPropagation();
+      if(typeof e.stopImmediatePropagation==='function') e.stopImmediatePropagation();
+      hardLogout();
+    }
+  }, true);
+
+  window.KFTP_LOCAL_AUTH={applyAccess,isAdmin,currentProfile,logout,hardLogout};
 
   window.addEventListener('DOMContentLoaded',()=>{
-    // Briefly block the app shell until the Supabase bridge either shows its gate or restores a session.
     showLoadingOverlay();
     let tries=0;
     const timer=setInterval(()=>{
@@ -101,7 +152,6 @@
         return;
       }
       if(tries>40){
-        // Keep the page locked if the Supabase bridge failed to load; this prevents silently falling back to local-only access.
         showLoadingOverlay();
         clearInterval(timer);
       }
