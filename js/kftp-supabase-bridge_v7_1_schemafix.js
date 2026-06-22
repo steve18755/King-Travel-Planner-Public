@@ -1,5 +1,6 @@
-/* King Family Travel Planner v7.2 Supabase bridge
+/* King Family Travel Planner v7.2.1 Supabase bridge
    Pass 1: Supabase Auth owns login/logout while preserving the family-member login UX.
+   Pass 2: wires in asset diagnostics and Supabase Storage readiness checks.
    Canonical state is app.planner_state. localStorage is used only as a browser cache/runtime buffer.
 */
 (function(){
@@ -29,7 +30,6 @@
 
   function configured(){ return !!(CFG && CFG.mode !== 'local-demo' && CFG.url && CFG.anonKey && window.supabase && window.supabase.createClient); }
   function esc(s){return String(s??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-  function qs(sel){return document.querySelector(sel)}
   function db(){ return client && typeof client.schema === 'function' ? client.schema(DB_SCHEMA) : client; }
   function familyByLocal(local){ return FAMILY_LOGIN_OPTIONS.find(f=>f.local===local) || FAMILY_LOGIN_OPTIONS[0]; }
   function normalizeLogin(s){ return String(s||'').trim().toLowerCase(); }
@@ -203,7 +203,7 @@
     if(!appUser) appUser=await fetchAppUser();
     const liveState=(window.KFTP && window.KFTP.state) || JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
     const scope=CFG.plannerStateScope || 'household';
-    const row={scope, household_id: scope==='household'?appUser.household_id:null, owner_profile_id: scope==='user'?appUser.profile_id:null, state: liveState, version:'v7.2', updated_by:(await client.auth.getUser()).data.user.id, updated_at:new Date().toISOString()};
+    const row={scope, household_id: scope==='household'?appUser.household_id:null, owner_profile_id: scope==='user'?appUser.profile_id:null, state: liveState, version:'v7.2.1', updated_by:(await client.auth.getUser()).data.user.id, updated_at:new Date().toISOString()};
     const {error}=await db().from('planner_state').upsert(row,{onConflict:'scope,household_id,owner_profile_id'});
     if(error) throw error;
     await logAudit('planner_state_save','Saved full planner state to Supabase');
@@ -213,13 +213,32 @@
   async function logAudit(action,detail){
     try{await db().from('audit_log').insert({actor_user_id:(await client.auth.getUser()).data.user.id, actor_profile_id:appUser&&appUser.profile_id, household_id:appUser&&appUser.household_id, action, table_name:null, detail:{message:detail, url:location.href.split('#')[0]}});}catch(e){}
   }
+  function loadAssetDiagnostics(){
+    return new Promise((resolve,reject)=>{
+      if(window.KFTP_ASSETS && typeof window.KFTP_ASSETS.runAssetDiagnostics==='function') return resolve(window.KFTP_ASSETS);
+      const existing=document.getElementById('kftpAssetDiagnosticsScript');
+      if(existing){ existing.addEventListener('load',()=>resolve(window.KFTP_ASSETS)); existing.addEventListener('error',()=>reject(new Error('Asset diagnostics module failed to load.'))); return; }
+      const s=document.createElement('script');
+      s.id='kftpAssetDiagnosticsScript';
+      s.src='js/kftp-asset-diagnostics_v7_2.js?v=7.2';
+      s.onload=()=>resolve(window.KFTP_ASSETS);
+      s.onerror=()=>reject(new Error('Asset diagnostics module failed to load.'));
+      document.head.appendChild(s);
+    });
+  }
+  async function runAssetDiagnostics(){
+    const mod=await loadAssetDiagnostics();
+    if(!mod || typeof mod.runAssetDiagnostics!=='function') throw new Error('Asset diagnostics module is unavailable.');
+    return mod.runAssetDiagnostics({client, db, appUser, setCloudStatus, logAudit});
+  }
   function injectCloudBar(){
     injectStyles();
     let bar=document.getElementById('sbCloudBar');
     if(!bar){bar=document.createElement('div');bar.id='sbCloudBar';bar.className='sbCloudBar';document.body.appendChild(bar);}
-    bar.innerHTML=`<span id="sbDot" class="sbStatusDot warn"></span><span id="sbText">Supabase connected</span><button class="save" id="sbSave">Save</button><button class="load" id="sbLoad">Load</button><button class="out" id="sbOut">Sign out</button>`;
+    bar.innerHTML=`<span id="sbDot" class="sbStatusDot warn"></span><span id="sbText">Supabase connected</span><button class="save" id="sbSave">Save</button><button class="load" id="sbLoad">Load</button><button class="load" id="sbAssets">Assets</button><button class="out" id="sbOut">Sign out</button>`;
     document.getElementById('sbSave').onclick=()=>savePlannerState(true).catch(e=>{setCloudStatus('err',e.message);alert(e.message);});
     document.getElementById('sbLoad').onclick=()=>loadPlannerState(true).catch(e=>{setCloudStatus('err',e.message);alert(e.message);});
+    document.getElementById('sbAssets').onclick=()=>runAssetDiagnostics().catch(e=>{setCloudStatus('err',e.message);alert(e.message);});
     document.getElementById('sbOut').onclick=signOut;
   }
   function setCloudStatus(kind,text){const d=document.getElementById('sbDot'), t=document.getElementById('sbText'); if(d)d.className='sbStatusDot '+(kind||''); if(t)t.textContent=text||'';}
@@ -240,6 +259,6 @@
     await completeLogin(false);
     startAutosave();
   }
-  window.KFTP_SUPABASE = { init, savePlannerState, loadPlannerState, signOut, get client(){return client}, get appUser(){return appUser} };
+  window.KFTP_SUPABASE = { init, savePlannerState, loadPlannerState, signOut, runAssetDiagnostics, get client(){return client}, get appUser(){return appUser} };
   window.addEventListener('DOMContentLoaded',()=>setTimeout(()=>init().catch(e=>showGate(e.message||String(e),'error')),120));
 })();
