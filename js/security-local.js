@@ -1,4 +1,4 @@
-// v7.2.1 Supabase security shim.
+// v7.2.2 Supabase security shim.
 // Pass 1: the old browser-only local gate is disabled.
 // Supabase Auth + app.app_users approval now own login/logout/roles.
 (function(){
@@ -18,6 +18,10 @@
   const AUTH_SESSION_KEY='kftp_v31_auth_session';
   const ADMIN_TABS=['admin','suppliers','vendorcheck','awardworksheet'];
   const $=id=>document.getElementById(id);
+
+  function html(value){
+    return String(value==null?'':value).replace(/[&<>\"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});
+  }
 
   function removeLocalOverlay(){
     const o=$('authOverlay');
@@ -47,6 +51,36 @@
     const s=session();
     if(!s) return null;
     return { id:s.profileId, name:s.name, role:s.role, household_id:s.household_id, supabase:true };
+  }
+
+  function householdName(s){
+    const raw=(s&&s.household_id)||'stephen_household';
+    const map={stephen_household:'Stephen King Household'};
+    return map[raw] || raw.replace(/_/g,' ');
+  }
+
+  function householdMembers(){
+    try{
+      const list=(window.KFTP&&window.KFTP.state&&window.KFTP.state.familyProfiles)||[];
+      const names=list.filter(p=>p.household_id==='stephen_household').map(p=>p.name||p.display_name||p.id).filter(Boolean);
+      return names.length?names.join(', '):'Stephen King, Selma Ward, Ashly King';
+    }catch(e){return 'Stephen King, Selma Ward, Ashly King';}
+  }
+
+  function ensureUserBar(){
+    const s=session();
+    if(!s) return;
+    let bar=$('topUserBar');
+    if(!bar){
+      const main=document.querySelector('.main') || document.body;
+      bar=document.createElement('div');
+      bar.id='topUserBar';
+      bar.className='topUserBar';
+      if(main.firstChild) main.insertBefore(bar,main.firstChild); else main.appendChild(bar);
+    }
+    bar.innerHTML=`<div class="topUserLeft"><div class="avatarIcon" style="width:42px;height:42px;border-radius:16px;font-size:24px">👤</div><div><b>Logged in as</b><br><strong>${html(s.name||'Supabase user')}</strong></div><span class="pill ok">${html(s.role||'user')}</span><div><b>${html(householdName(s))}</b><br><span class="small">${html(householdMembers())}</span></div></div><div class="topUserRight"><button class="btn sm ghost" id="topSwitchUserBtn">Switch User</button><button class="btn sm ghost" id="topLogoutBtn">Logout</button></div>`;
+    const lo=$('topLogoutBtn'); if(lo) lo.onclick=logout;
+    const sw=$('topSwitchUserBtn'); if(sw) sw.onclick=logout;
   }
 
   function hideAdminForNonAdmin(){
@@ -88,6 +122,7 @@
     const s=session();
     if(s){
       removeLocalOverlay();
+      ensureUserBar();
       hideAdminForNonAdmin();
       window.KFTP_AUTH=window.KFTP_AUTH||{enabled:true,role:s.role,currentUser:s,requireAdmin:isAdmin,logout};
       window.KFTP_AUTH.enabled=true;
