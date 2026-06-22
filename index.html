@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>King Family Travel Planner v7.4</title>
+  <title>King Family Travel Planner v6.4</title>
   <style>
 /* King Family Travel Planner v3.0 - extracted from v2.12.1 fixed. */
 
@@ -209,7 +209,7 @@ body.theme-night{--bg:#0b1720;--card:#111f2a;--ink:#e8f1f5;--muted:#9bb0bd;--lin
     <aside class="side" id="side">
       <div class="brand">
         <div class="logo crestLogo"><img src="assets/images/KingCrest.PNG" alt="King crest"></div>
-        <div><h1>King Family<br>Travel Planner</h1><p>Version 7.4 · Supabase secure backend</p></div>
+        <div><h1>King Family<br>Travel Planner</h1><p>Version 7.0 · Supabase secure backend</p></div>
       </div>
       <nav id="nav" class="nav"></nav>
       <div class="sideBox"><b>Storage:</b><br>Supabase secure backend. Browser cache is temporary; use the cloud Save/Load controls.</div>
@@ -234,12 +234,12 @@ body.theme-night{--bg:#0b1720;--card:#111f2a;--ink:#e8f1f5;--muted:#9bb0bd;--lin
 // For GitHub Pages, this stays client-side only. Secure backend settings will be added in v3.1+.
 window.KFTP_CONFIG = {
   appName: 'King Family Travel Planner',
-  version: '7.4',
-  mode: 'supabase',
+  version: '3.1',
+  mode: 'local-login-secure-ready',
   storageKey: 'kingTravelPlannerV31',
   priorStorageKeys: ['kingTravelPlannerV30','kingTravelPlannerV29'],
-  secureBackend: { enabled: true, provider: 'supabase' },
-  localSecurity: { enabled: false, adminProfileId: 'stephen', firstLoginSetup: false },
+  secureBackend: { enabled: false, provider: 'planned-supabase' },
+  localSecurity: { enabled: true, adminProfileId: 'stephen', firstLoginSetup: true },
   defaultTimezone: 'America/Chicago',
   adminOwner: 'Stephen King'
 };
@@ -2406,7 +2406,7 @@ v53EnsureState();
 
 
 /* === v6.8 brand asset cleanup + loyalty de-duplication === */
-const V67_VERSION_LABEL='Version 7.4 · Supabase secure backend';
+const V67_VERSION_LABEL='Version 7.0 · Supabase secure backend';
 const V67_BRAND_LOGOS=[
   [/american|aadvantage|\baa\b/i,'assets/images/airlines/AA.png'],
   [/delta|skymiles/i,'assets/images/airlines/delta.png'],
@@ -2523,294 +2523,140 @@ try{initNav();renderAll();}catch(e){console.error(e);document.body.insertAdjacen
   </script>
 
   <script>
-/* inlined js/security-local.js replaced by Supabase no-op for GitHub Pages reliability */
-// King Family Travel Planner v7.3 Supabase mode
-// HARD DISABLE for the old v5.2 local browser login gate.
-// Supabase owns authentication. This file intentionally does not create authOverlay.
+/* inlined js/security-local.js for GitHub Pages reliability */
+// v5.2 local login gate.
+// This is a client-side access gate for the GitHub prototype. True security still requires Supabase/Firebase/other backend auth + database RLS.
 (function(){
   'use strict';
-
-  const AUTH_SESSION_KEY = 'kftp_v31_auth_session';
-
-  function removeLocalGate(){
+  const AUTH_USERS_KEY='kftp_v31_auth_users';
+  const AUTH_SESSION_KEY='kftp_v31_auth_session';
+  const ADMIN_LOG_KEY='kftp_admin_activity_log_v33';
+  const cfg=window.KFTP_CONFIG||{};
+  const family=[
+    {id:'stephen',name:'Stephen King',email:'stephen.private@example.com',role:'admin'},
+    {id:'selma',name:'Selma Ward',email:'selma.private@example.com',role:'family'},
+    {id:'ashly',name:'Ashly King',email:'ashly.private@example.com',role:'family'},
+    {id:'david',name:'David King',email:'david.private@example.com',role:'admin'},
+    {id:'elaire',name:'Elaire Ward',email:'',role:'extended_family'},
+    {id:'joshua',name:'Joshua King',email:'joshua.private@example.com',role:'extended_family'},
+    {id:'christine',name:'Christine King',email:'',role:'extended_family'},
+    {id:'daniel',name:'Daniel King',email:'',role:'child'},
+    {id:'michael',name:'Michael King',email:'michael.private@example.com',role:'extended_family'},
+    {id:'quintin',name:'Quintin King',email:'',role:'child'},
+    {id:'adelaide',name:'Adelaide King',email:'',role:'child'}
+  ];
+  const $=id=>document.getElementById(id);
+  function users(){try{return JSON.parse(localStorage.getItem(AUTH_USERS_KEY)||'{}')}catch(e){return {}}}
+  function saveUsers(u){localStorage.setItem(AUTH_USERS_KEY,JSON.stringify(u));}
+  function session(){try{return JSON.parse(localStorage.getItem(AUTH_SESSION_KEY)||'null')}catch(e){return null}}
+  function setSession(s){localStorage.setItem(AUTH_SESSION_KEY,JSON.stringify(s));}
+  function clearSession(){localStorage.removeItem(AUTH_SESSION_KEY);}
+  function enc(buf){return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');}
+  async function hash(pw,salt){let data=new TextEncoder().encode(String(salt||'')+'|'+String(pw||''));let buf=await crypto.subtle.digest('SHA-256',data);return enc(buf);}
+  function salt(){return crypto.getRandomValues(new Uint8Array(16)).reduce((s,b)=>s+b.toString(16).padStart(2,'0'),'');}
+  
+  function localLog(action, detail){
     try{
-      const o = document.getElementById('authOverlay');
-      if(o) o.remove();
-      document.body.classList.remove('authLocked');
+      const rec={id:'log_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),at:new Date().toISOString(),user:detail&&detail.name?detail.name:'Unknown/local',role:detail&&detail.role?detail.role:'unknown',action:String(action||''),detail:detail&&detail.detail?String(detail.detail):'',url:location.href.split('#')[0]};
+      const arr=JSON.parse(localStorage.getItem(ADMIN_LOG_KEY)||'[]'); arr.unshift(rec); localStorage.setItem(ADMIN_LOG_KEY,JSON.stringify(arr.slice(0,500)));
     }catch(e){}
   }
 
-  function isAdmin(){
-    try{
-      const s = JSON.parse(localStorage.getItem(AUTH_SESSION_KEY) || 'null');
-      return !!(s && s.role === 'admin');
-    }catch(e){ return false; }
+  function currentProfile(){let s=session();return s&&family.find(f=>f.id===s.profileId);}
+  function isAdmin(){let p=currentProfile();return !!(p&&p.role==='admin');}
+  function authBox(){
+    const u=users();
+    const options=family.map(f=>`<option value="${f.id}">${f.name}${u[f.id]?' — login':' — first setup'}</option>`).join('');
+    return `<div id="authOverlay" class="authOverlay"><div class="authCard"><div class="authBrand"><span>🛡️</span><div><h1>King Family Travel Planner</h1><p>v5.2 local login gate</p></div></div><form id="authForm" class="authForm"><label>Family member</label><select name="profileId" id="authProfile">${options}</select><label>Username</label><input name="username" autocomplete="username" required placeholder="Create or enter username"><label>Password</label><input type="password" name="password" autocomplete="current-password" required placeholder="Create or enter password"><label id="confirmLabel" class="authConfirm">Confirm password</label><input id="authConfirm" class="authConfirm" type="password" name="confirm" autocomplete="new-password" placeholder="Confirm first-login password"><button class="btn primary fullBtn">Continue</button><p class="muted small">First login for each family member creates that member's local username/password. Stephen and David are admin roles for this local prototype.</p></form></div></div>`;
+  }
+  function updateConfirmVisibility(){let u=users();let pid=($('authProfile')||{}).value;let first=!u[pid];document.querySelectorAll('.authConfirm').forEach(el=>el.style.display=first?'block':'none');}
+  async function handleAuth(e){
+    e.preventDefault();
+    const fd=new FormData(e.target), pid=fd.get('profileId'), username=String(fd.get('username')||'').trim(), password=String(fd.get('password')||''), confirm=String(fd.get('confirm')||'');
+    let all=users(), prof=family.find(f=>f.id===pid);
+    if(!prof){alert('Profile not recognized.');return;}
+    if(!all[pid]){
+      if(password.length<8){alert('Password must be at least 8 characters.');return;}
+      if(password!==confirm){alert('Passwords do not match.');return;}
+      const s=salt(); all[pid]={profileId:pid,username,salt:s,hash:await hash(password,s),role:prof.role,createdAt:new Date().toISOString(),lastLogin:null};
+      saveUsers(all);
+    }else{
+      const rec=all[pid];
+      if(username!==rec.username || await hash(password,rec.salt)!==rec.hash){alert('Login failed. Check username/password.');return;}
+    }
+    all=users(); all[pid].lastLogin=new Date().toISOString(); saveUsers(all);
+    setSession({profileId:pid,name:prof.name,role:prof.role,loginAt:new Date().toISOString()});
+    localLog('Login', {name:prof.name, role:prof.role, detail: all[pid]&&all[pid].createdAt===all[pid].lastLogin?'First login/setup':'User login'});
+    applyAccess();
   }
 
-  function currentProfile(){
-    try{ return JSON.parse(localStorage.getItem(AUTH_SESSION_KEY) || 'null'); }
-    catch(e){ return null; }
-  }
+  function authToProfileId(pid){return ({stephen:'stephen_king',selma:'selma_ward',ashly:'ashly_king',david:'david_king',elaire:'elaire_ward',joshua:'joshua_king',christine:'christine_king',daniel:'daniel_king',michael:'michael_king',quintin:'quintin_king',adelaide:'adelaide_king'})[pid]||pid;}
+  function householdLabelForSession(s){try{const p=(window.KFTP&&window.KFTP.state&&window.KFTP.state.familyProfiles||[]).find(x=>x.id===authToProfileId(s.profileId)); const hh=p&&p.household_id; const map={stephen_household:'Stephen King Household',joshua_household:'Joshua King Household',michael_household:'Michael King Household',david_household:'David King Household',elaire_household:'Elaire Ward Household'}; return map[hh]||'';}catch(e){return '';}}
+  function householdMembersForSession(s){try{const pid=authToProfileId(s.profileId); const profiles=(window.KFTP&&window.KFTP.state&&window.KFTP.state.familyProfiles)||[]; const p=profiles.find(x=>x.id===pid); if(!p||!p.household_id)return ''; return profiles.filter(x=>x.household_id===p.household_id).map(x=>x.name).join(', ');}catch(e){return '';}}
 
-  async function logout(){
-    try{
-      if(window.KFTP_SUPABASE && typeof window.KFTP_SUPABASE.signOut === 'function'){
-        await window.KFTP_SUPABASE.signOut();
-        return;
+  function addLoginControls(){
+    const s=session(); if(!s)return;
+    let bar=document.getElementById('topUserBar');
+    if(!bar){
+      const main=document.querySelector('.main')||document.body;
+      bar=document.createElement('div');
+      bar.id='topUserBar';
+      bar.className='topUserBar';
+      main.insertBefore(bar, main.firstChild);
+    }
+    bar.innerHTML=`<div class="topUserLeft"><b>Logged in:</b> ${s.name} <span class="pill ${s.role==='admin'?'ok':'readonlyPill'}">${s.role}</span>${householdLabelForSession(s)?` <span class="pill">${householdLabelForSession(s)}</span>`:''}${householdMembersForSession(s)?` <span class="householdBarMembers">Household: ${householdMembersForSession(s)}</span>`:''}</div><div class="topUserRight"><button class="btn sm ghost" id="topSwitchUserBtn">Switch user</button><button class="btn sm ghost" id="topLogoutBtn">Logout</button></div>`;
+    const logout=()=>{localLog('Logout',{name:s.name,role:s.role,detail:'User clicked logout'});clearSession();location.reload();};
+    const sw=()=>{localLog('Switch user',{name:s.name,role:s.role,detail:'User switched account'});clearSession();location.reload();};
+    const lo=document.getElementById('topLogoutBtn'); if(lo)lo.onclick=logout;
+    const su=document.getElementById('topSwitchUserBtn'); if(su)su.onclick=sw;
+    // Keep a compact sidebar status for small screens but do not duplicate controls repeatedly.
+    let side=document.getElementById('authStatus');
+    if(!side){
+      const aside=document.querySelector('.side');
+      if(aside){
+        side=document.createElement('div'); side.id='authStatus'; side.className='sideBox authStatus'; aside.appendChild(side);
       }
-    }catch(e){}
-    try{ localStorage.removeItem(AUTH_SESSION_KEY); }catch(e){}
-    location.reload();
+    }
+    if(side)side.innerHTML=`<b>Logged in:</b><br>${s.name}<br><span class="pill ${s.role==='admin'?'ok':'readonlyPill'}">${s.role}</span>`;
   }
-
-  // Keep this object so older app code that calls KFTP_LOCAL_AUTH does not break.
-  window.KFTP_LOCAL_AUTH = {
-    applyAccess: removeLocalGate,
-    isAdmin,
-    currentProfile,
-    logout
-  };
-
-  // Keep this object as a safe fallback until the Supabase bridge replaces it after login.
-  window.KFTP_AUTH = window.KFTP_AUTH || {
-    enabled: true,
-    role: 'pending_supabase_login',
-    currentUser: null,
-    requireAdmin: isAdmin,
-    logout
-  };
-
-  // Aggressively remove any stale local login overlay created by an older cached file.
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', removeLocalGate);
-  }else{
-    removeLocalGate();
+  function hideAdminForNonAdmin(){
+    const admin=isAdmin();
+    document.body.classList.toggle('nonAdmin',!admin);
+    document.querySelectorAll('#nav button').forEach(b=>{if(['admin','suppliers','vendorcheck','awardworksheet'].includes(b.dataset.tab))b.style.display=admin?'':'none';});
+    if(window.KFTP && !window.KFTP._authWrapped){
+      const orig=window.KFTP.switchTab;
+      window.KFTP.switchTab=function(id){ if(['admin','suppliers','vendorcheck','awardworksheet'].includes(id)&&!isAdmin()){alert('This tab is restricted to admins.'); return orig('dash');} return orig(id); };
+      window.KFTP._authWrapped=true;
+    }
   }
-  setInterval(removeLocalGate, 250);
+  function showGate(){
+    if(!$('authOverlay'))document.body.insertAdjacentHTML('beforeend',authBox());
+    $('authForm').onsubmit=handleAuth;
+    $('authProfile').onchange=updateConfirmVisibility;
+    updateConfirmVisibility();
+    document.body.classList.add('authLocked');
+  }
+  function applyAccess(){
+    const s=session();
+    const overlay=$('authOverlay'); if(overlay)overlay.remove();
+    if(!s){showGate(); return;}
+    document.body.classList.remove('authLocked');
+    addLoginControls();
+    hideAdminForNonAdmin();
+    window.KFTP_AUTH={enabled:true,role:s.role,currentUser:s,requireAdmin:isAdmin,logout:()=>{let s=session()||{};localLog('Logout',{name:s.name,role:s.role,detail:'Programmatic logout'});clearSession();location.reload();}};
+  }
+  window.KFTP_LOCAL_AUTH={applyAccess,isAdmin,currentProfile,logout:()=>{let s=session()||{};localLog('Logout',{name:s.name,role:s.role,detail:'Programmatic logout'});clearSession();location.reload();}};
+  window.addEventListener('DOMContentLoaded',()=>setTimeout(applyAccess,80));
 })();
 
   </script>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/kftp-supabase-bridge.js"></script>
+
 <script>
-/* inlined supabase-config.js v7.4 for GitHub Pages reliability */
-// King Family Travel Planner v7.0 Supabase config
-// Safe to publish: the Supabase URL and anon/publishable key are meant for browser use when RLS is enabled.
-// NEVER place the service_role key in this file or in GitHub.
-window.KFTP_SUPABASE_CONFIG = {
-  url: "https://vguuedcyfzgqbaakhurg.supabase.co",
-  anonKey: "sb_publishable_iZkN-HzBToLxfgdzIScFUA_GX1hkCTo",
-  mode: "supabase",
-  dbSchema: "app",
-  plannerStateScope: "household",
-  autosaveSeconds: 60
-};
-</script>
-<script>
-/* inlined kftp-supabase-bridge.js v7.4 for GitHub Pages reliability */
-/* King Family Travel Planner v7.4 Supabase bridge
-   Purpose: move the working single-file planner from local-only data to Supabase-backed login and online state.
-   Canonical state is app.planner_state. localStorage is used only as a browser cache/runtime buffer.
-*/
-(function(){
-  const CFG = window.KFTP_SUPABASE_CONFIG || {};
-  const DB_SCHEMA = CFG.dbSchema || 'app';
-  const STORAGE_KEY = (window.KFTP_CONFIG && window.KFTP_CONFIG.storageKey) || 'kingTravelPlannerV30';
-  const AUTH_SESSION_KEY = 'kftp_v31_auth_session';
-  const PROFILE_TO_LOCAL = {
-    stephen_king:'stephen', selma_ward:'selma', ashly_king:'ashly', david_king:'david', elaire_ward:'elaire',
-    joshua_king:'joshua', christine_king:'christine', daniel_king:'daniel', michael_king:'michael', quintin_king:'quintin', adelaide_king:'adelaide'
-  };
-  const LOCAL_TO_PROFILE = Object.fromEntries(Object.entries(PROFILE_TO_LOCAL).map(([k,v])=>[v,k]));
-  let client=null, appUser=null, initialized=false, autosaveTimer=null;
-  function configured(){ return !!(CFG && CFG.mode !== 'local-demo' && CFG.url && CFG.anonKey && window.supabase && window.supabase.createClient); }
-  function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-  function qs(sel){return document.querySelector(sel)}
-  function sessionToLocal(row){
-    if(!row) return null;
-    const profile = row.profiles || row.profile || {};
-    const localId = PROFILE_TO_LOCAL[row.profile_id] || row.profile_id;
-    const displayName =
-      profile.display_name ||
-      profile.name ||
-      [profile.first_name, profile.last_name].filter(Boolean).join(' ') ||
-      localId;
-    const s = { profileId: localId, name: displayName, role: row.role, loginAt: new Date().toISOString(), supabase:true, household_id: row.household_id, profile_uuid: row.profile_id };
-    localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s));
-    window.KFTP_AUTH = { enabled:true, role:row.role, currentUser:s, requireAdmin:()=>row.role==='admin', logout:signOut };
-    return s;
-  }
-  function db(){
-    return client && typeof client.schema === 'function' ? client.schema(DB_SCHEMA) : client;
-  }
-  function injectStyles(){
-    if(document.getElementById('kftpSupabaseStyles')) return;
-    const st=document.createElement('style'); st.id='kftpSupabaseStyles';
-    st.textContent=`
-      .sbGate{position:fixed;inset:0;z-index:999999;background:linear-gradient(135deg,#073f4c,#0a766e);display:flex;align-items:center;justify-content:center;padding:24px;color:#12202b}
-      .sbCard{width:min(520px,96vw);background:#fff;border-radius:24px;padding:24px;box-shadow:0 24px 80px rgba(0,0,0,.35);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
-      .sbCard h1{margin:0 0 6px;font-size:28px}.sbCard p{color:#4b6372}.sbCard label{display:block;font-weight:700;margin:14px 0 6px}.sbCard input{width:100%;padding:13px 14px;border:1px solid #cfe0e6;border-radius:12px;font:16px system-ui}.sbRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.sbBtn{border:0;border-radius:12px;padding:12px 16px;font-weight:800;cursor:pointer;background:#0a7d87;color:#fff}.sbBtn.secondary{background:#edf6f8;color:#0a4550}.sbMsg{margin-top:12px;padding:10px 12px;border-radius:12px;background:#f4f8fa;color:#244}.sbWarn{background:#fff5d8;color:#5a4300}.sbErr{background:#ffe3e3;color:#7a1111}.sbCloudBar{position:fixed;right:14px;bottom:14px;z-index:99998;background:#fff;border:1px solid #cfe0e6;border-radius:18px;box-shadow:0 12px 32px rgba(0,0,0,.16);padding:10px 12px;display:flex;align-items:center;gap:8px;font:13px system-ui}.sbCloudBar button{border:0;border-radius:10px;padding:8px 10px;font-weight:800;cursor:pointer}.sbCloudBar .save{background:#0a7d87;color:#fff}.sbCloudBar .load{background:#edf6f8;color:#0a4550}.sbCloudBar .out{background:#ffe9e9;color:#7a1111}.sbStatusDot{width:10px;height:10px;border-radius:99px;background:#bbb}.sbStatusDot.ok{background:#10b981}.sbStatusDot.warn{background:#f59e0b}.sbStatusDot.err{background:#ef4444}
-    `;
-    document.head.appendChild(st);
-  }
-  function removeLocalGate(){ const o=document.getElementById('authOverlay'); if(o) o.remove(); document.body.classList.remove('authLocked'); }
-  function showGate(message, kind){
-    injectStyles(); removeLocalGate();
-    let gate=document.getElementById('sbGate');
-    if(!gate){
-      gate=document.createElement('div'); gate.id='sbGate'; gate.className='sbGate';
-      gate.innerHTML=`<div class="sbCard"><h1>King Family Travel Planner</h1><p>Secure Supabase login</p><form id="sbLoginForm"><label>Email</label><input id="sbEmail" type="email" autocomplete="email" required placeholder="name@example.com"><label>Password</label><input id="sbPassword" type="password" autocomplete="current-password" required placeholder="Password"><div class="sbRow"><button class="sbBtn" type="submit">Sign in</button><button class="sbBtn secondary" type="button" id="sbSignup">Create account</button><button class="sbBtn secondary" type="button" id="sbMagic">Email magic link</button></div><div id="sbMsg" class="sbMsg">Sign in with the account approved in Supabase.</div></form></div>`;
-      document.body.appendChild(gate);
-      document.getElementById('sbLoginForm').onsubmit=async e=>{e.preventDefault(); await signIn(document.getElementById('sbEmail').value, document.getElementById('sbPassword').value);};
-      document.getElementById('sbSignup').onclick=async()=>{await signUp(document.getElementById('sbEmail').value, document.getElementById('sbPassword').value);};
-      document.getElementById('sbMagic').onclick=async()=>{await magic(document.getElementById('sbEmail').value);};
-    }
-    if(message) setMsg(message,kind);
-  }
-  function setMsg(text,kind){const m=document.getElementById('sbMsg'); if(m){m.className='sbMsg '+(kind==='error'?'sbErr':kind==='warn'?'sbWarn':''); m.textContent=text;}}
-  async function signIn(email,password){
-    setMsg('Signing in...');
-    const {error}=await client.auth.signInWithPassword({email,password});
-    if(error){setMsg(error.message,'error');return;}
-    await completeLogin(true);
-  }
-  async function signUp(email,password){
-    setMsg('Creating account...');
-    const {error}=await client.auth.signUp({email,password});
-    if(error){setMsg(error.message,'error');return;}
-    setMsg('Account created. If email confirmation is enabled, confirm the email. Then ask an admin to link/approve the profile in app.app_users.','warn');
-  }
-  async function magic(email){
-    setMsg('Sending magic link...');
-    const {error}=await client.auth.signInWithOtp({email, options:{emailRedirectTo:location.href.split('#')[0]}});
-    if(error){setMsg(error.message,'error');return;}
-    setMsg('Magic link sent. Check email.','warn');
-  }
-  async function fetchAppUser(){
-    const {data:userData,error:userError}=await client.auth.getUser();
-    if(userError) throw userError;
-    const user = userData && userData.user;
-    if(!user) throw new Error('No active Supabase Auth user session.');
-
-    const {data,error}=await db()
-      .from('app_users')
-      .select('auth_user_id,profile_id,household_id,role,approved')
-      .eq('auth_user_id', user.id)
-      .maybeSingle();
-
-    if(error) throw error;
-    if(!data) throw new Error('This login exists in Supabase Auth, but it is not linked in app.app_users yet.');
-    if(!data.approved) throw new Error('This login exists, but it is not approved in app.app_users yet.');
-
-    // Fetch profile separately instead of relying on PostgREST embedded relationships.
-    // This avoids schema-cache relationship errors while the database is still being set up.
-    try{
-      const {data:profile,error:profileError}=await db()
-        .from('profiles')
-        .select('*')
-        .eq('id', data.profile_id)
-        .maybeSingle();
-      if(!profileError) data.profiles = profile || {};
-    }catch(e){
-      data.profiles = {};
-    }
-    return data;
-  }
-  async function completeLogin(reload){
-    try{
-      appUser = await fetchAppUser();
-      sessionToLocal(appUser);
-      await loadPlannerState(false);
-      await logAudit('login','Supabase login completed');
-      removeLocalGate();
-      injectCloudBar();
-      if(reload) location.reload();
-    }catch(e){
-      showGate(e.message || String(e),'error');
-    }
-  }
-  async function loadPlannerState(showAlert){
-    if(!appUser) appUser=await fetchAppUser();
-    const scope=CFG.plannerStateScope || 'household';
-    let q=db().from('planner_state').select('*').eq('scope',scope).order('updated_at',{ascending:false}).limit(1);
-    if(scope==='household') q=q.eq('household_id',appUser.household_id);
-    if(scope==='user') q=q.eq('owner_profile_id',appUser.profile_id);
-    const {data,error}=await q;
-    if(error) throw error;
-    if(data && data[0] && data[0].state){
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data[0].state));
-      setCloudStatus('ok','Loaded from Supabase '+new Date(data[0].updated_at).toLocaleString());
-      if(showAlert) alert('Loaded planner state from Supabase. The page will refresh.');
-      if(showAlert) location.reload();
-      return true;
-    }
-    setCloudStatus('warn','No Supabase planner state found yet. Use Save to Supabase after verifying the current data.');
-    return false;
-  }
-  async function savePlannerState(showAlert){
-    if(!appUser) appUser=await fetchAppUser();
-    const liveState=(window.KFTP && window.KFTP.state) || JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
-    const scope=CFG.plannerStateScope || 'household';
-    const row={scope, household_id: scope==='household'?appUser.household_id:null, owner_profile_id: scope==='user'?appUser.profile_id:null, state: liveState, version:'v7.4', updated_by:(await client.auth.getUser()).data.user.id, updated_at:new Date().toISOString()};
-    const {error}=await db().from('planner_state').upsert(row,{onConflict:'scope,household_id,owner_profile_id'});
-    if(error) throw error;
-    await logAudit('planner_state_save','Saved full planner state to Supabase');
-    setCloudStatus('ok','Saved to Supabase '+new Date().toLocaleTimeString());
-    if(showAlert) alert('Saved to Supabase.');
-  }
-  async function logAudit(action,detail){
-    try{await db().from('audit_log').insert({actor_user_id:(await client.auth.getUser()).data.user.id, actor_profile_id:appUser&&appUser.profile_id, household_id:appUser&&appUser.household_id, action, table_name:null, detail:{message:detail, url:location.href.split('#')[0]}});}catch(e){}
-  }
-  function injectCloudBar(){
-    injectStyles();
-    let bar=document.getElementById('sbCloudBar');
-    if(!bar){bar=document.createElement('div');bar.id='sbCloudBar';bar.className='sbCloudBar';document.body.appendChild(bar);}
-    bar.innerHTML=`<span id="sbDot" class="sbStatusDot warn"></span><span id="sbText">Supabase connected</span><button class="save" id="sbSave">Save</button><button class="load" id="sbLoad">Load</button><button class="out" id="sbOut">Sign out</button>`;
-    document.getElementById('sbSave').onclick=()=>savePlannerState(true).catch(e=>{setCloudStatus('err',e.message);alert(e.message);});
-    document.getElementById('sbLoad').onclick=()=>loadPlannerState(true).catch(e=>{setCloudStatus('err',e.message);alert(e.message);});
-    document.getElementById('sbOut').onclick=signOut;
-  }
-  function setCloudStatus(kind,text){const d=document.getElementById('sbDot'), t=document.getElementById('sbText'); if(d)d.className='sbStatusDot '+(kind||''); if(t)t.textContent=text||'';}
-  async function signOut(){try{await logAudit('logout','Supabase logout'); await client.auth.signOut();}catch(e){} localStorage.removeItem(AUTH_SESSION_KEY); location.reload();}
-  function startAutosave(){
-    const secs=Number(CFG.autosaveSeconds||0); if(!secs || secs<20) return;
-    if(autosaveTimer) clearInterval(autosaveTimer);
-    autosaveTimer=setInterval(()=>savePlannerState(false).catch(e=>setCloudStatus('err','Autosave failed: '+e.message)), secs*1000);
-  }
-  async function init(){
-    if(initialized) return; initialized=true;
-    if(!configured()){ console.warn('KFTP Supabase bridge not configured. Using public-safe local demo mode.'); return; }
-    injectStyles();
-    client=window.supabase.createClient(CFG.url, CFG.anonKey, {db:{schema:DB_SCHEMA}, auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:true}});
-    // Remove local gate that may be inserted by the prototype auth script.
-    setInterval(()=>{ if(!appUser) removeLocalGate(); }, 250);
-    const {data}=await client.auth.getSession();
-    if(!data.session){ showGate('Sign in to load the secure online planner.'); return; }
-    await completeLogin(false);
-    startAutosave();
-  }
-  window.KFTP_SUPABASE = { init, savePlannerState, loadPlannerState, signOut, get client(){return client}, get appUser(){return appUser} };
-  window.addEventListener('DOMContentLoaded',()=>setTimeout(()=>init().catch(e=>showGate(e.message||String(e),'error')),120));
-})();
-
-</script>
-<script>
-/* v7.4 final handoff: make the app's top-bar Logout/Switch User use Supabase sign-out. */
-window.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => {
-    try {
-      if (window.KFTP && window.KFTP_SUPABASE && typeof window.KFTP_SUPABASE.signOut === 'function') {
-        window.KFTP.logout = () => window.KFTP_SUPABASE.signOut();
-        window.KFTP.switchUser = () => window.KFTP_SUPABASE.signOut();
-      }
-      const n = document.createElement('div');
-      n.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:9999;background:#eafff5;border:1px solid #9be8c5;border-radius:12px;padding:8px 12px;font:12px system-ui;color:#064e3b;box-shadow:0 6px 18px rgba(0,0,0,.12)';
-      n.textContent = 'v7.4 Supabase: single-file app restored; secure backend enabled';
-      document.body.appendChild(n);
-      setTimeout(() => n.remove(), 5500);
-    } catch(e) { console.warn(e); }
-  }, 900);
-});
+window.addEventListener('DOMContentLoaded',()=>{try{const n=document.createElement('div');n.style.cssText='position:fixed;bottom:10px;right:10px;z-index:9999;background:#fff7cc;border:1px solid #e3b341;border-radius:12px;padding:8px 12px;font:12px system-ui;color:#463500;box-shadow:0 6px 18px rgba(0,0,0,.12)';n.textContent='v7.0 Supabase: online secure backend enabled when configured';document.body.appendChild(n);}catch(e){}});
 </script>
 </body>
 </html>
