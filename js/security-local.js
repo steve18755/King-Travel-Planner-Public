@@ -1,6 +1,7 @@
-// v7.2 Supabase security shim.
+// v7.2.1 Supabase security shim.
 // Pass 1: the old browser-only local password gate is disabled.
 // Supabase Auth + app.app_users approval now own login/logout/roles.
+// Pass 2 hotfix: load non-invasive dashboard repair if dashboard renderer is blank.
 (function(){
   'use strict';
   const AUTH_SESSION_KEY='kftp_v31_auth_session';
@@ -19,6 +20,15 @@
     document.body.insertAdjacentHTML('beforeend',
       `<div id="authOverlay" class="authOverlay"><div class="authCard"><div class="authBrand"><span>🛡️</span><div><h1>King Family Travel Planner</h1><p>Loading secure Supabase login…</p></div></div><p class="muted small">The local prototype password gate has been replaced by Supabase Auth.</p></div></div>`
     );
+  }
+
+  function loadDashboardRepair(){
+    if(window.KFTP_DASH_REPAIR || document.getElementById('kftpDashboardRepairScript')) return;
+    const s=document.createElement('script');
+    s.id='kftpDashboardRepairScript';
+    s.src='js/kftp-dashboard-repair_v7_2.js?v=7.2.1';
+    s.onerror=()=>console.warn('KFTP dashboard repair module failed to load.');
+    document.head.appendChild(s);
   }
 
   function session(){
@@ -77,6 +87,7 @@
     if(s){
       removeLocalOverlay();
       hideAdminForNonAdmin();
+      loadDashboardRepair();
       window.KFTP_AUTH=window.KFTP_AUTH||{enabled:true,role:s.role,currentUser:s,requireAdmin:isAdmin,logout};
       window.KFTP_AUTH.enabled=true;
       window.KFTP_AUTH.role=s.role;
@@ -91,6 +102,7 @@
   window.addEventListener('DOMContentLoaded',()=>{
     // Briefly block the app shell until the Supabase bridge either shows its gate or restores a session.
     showLoadingOverlay();
+    loadDashboardRepair();
     let tries=0;
     const timer=setInterval(()=>{
       tries++;
