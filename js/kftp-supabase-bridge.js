@@ -1,10 +1,8 @@
-/* King Family Travel Planner v7.2.7 active Supabase bridge
+/* King Family Travel Planner v7.2.8 active Supabase bridge
    Supabase Auth owns login/logout. This file is the one loaded by the current index.html.
-   It also repairs the legacy privacy-mask arithmetic placeholder used by the dashboard renderer.
+   Adds asset diagnostics only; no dashboard or auth behavior changes beyond the existing stable fixes.
 */
 (function(){
-  // The inlined dashboard code contains sanitized arithmetic placeholders such as masked-account.
-  // In JavaScript that evaluates as masked - account. These globals make the expression equal one day in ms.
   window.masked = 86400000;
   window.account = 0;
 
@@ -45,8 +43,6 @@
     throw new Error('Enter the approved Supabase email for '+fam.name+'. For Stephen, username "steve" is mapped to steve18755@gmail.com.');
   }
   function selectedFamily(){ return familyByLocal((document.getElementById('sbProfile')||{}).value || 'stephen'); }
-  function session(){try{return JSON.parse(localStorage.getItem(AUTH_SESSION_KEY)||'null')}catch(e){return null}}
-  function profiles(){try{return (window.KFTP&&window.KFTP.state&&window.KFTP.state.familyProfiles)||[]}catch(e){return []}}
   function sessionToLocal(row){
     if(!row) return null;
     const profile = row.profiles || row.profile || {};
@@ -62,11 +58,9 @@
     if(document.getElementById('kftpSupabaseStyles')) return;
     const st=document.createElement('style'); st.id='kftpSupabaseStyles';
     st.textContent=`
-      .sbGate{position:fixed;inset:0;z-index:999999;background:linear-gradient(135deg,rgba(4,37,50,.88),rgba(28,95,160,.76));display:flex;align-items:center;justify-content:center;padding:24px;color:#12202b}
-      .sbCard{width:min(540px,96vw);background:#fff;border-radius:26px;padding:24px;box-shadow:0 24px 80px rgba(0,0,0,.35);font-family:system-ui,-apple-system,Segoe UI,sans-serif;border:1px solid rgba(255,255,255,.55)}
-      .sbBrand{display:flex;gap:14px;align-items:center;margin-bottom:14px}.sbBrand span{width:58px;height:58px;border-radius:18px;background:linear-gradient(135deg,#c8fff0,#deecff);display:grid;place-items:center;font-size:32px}.sbBrand h1{margin:0;font-size:26px}.sbBrand p{margin:2px 0 0;color:#5a6f7b}
-      .sbCard label{display:block;font-weight:900;color:#324c59;margin:12px 0 6px}.sbCard input,.sbCard select{width:100%;padding:13px 14px;border:1px solid #cfe0e6;border-radius:14px;font:16px system-ui;background:#fff}.sbRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.sbBtn{border:0;border-radius:12px;padding:12px 16px;font-weight:900;cursor:pointer;background:#0a7d87;color:#fff}.sbBtn.secondary{background:#edf6f8;color:#0a4550}.sbMsg{margin-top:12px;padding:10px 12px;border-radius:12px;background:#f4f8fa;color:#244}.sbWarn{background:#fff5d8;color:#5a4300}.sbErr{background:#ffe3e3;color:#7a1111}.sbHint{font-size:12px;color:#647887;margin-top:10px;line-height:1.35}
-      .sbCloudBar{position:fixed;right:14px;bottom:14px;z-index:99998;background:#fff;border:1px solid #cfe0e6;border-radius:18px;box-shadow:0 12px 32px rgba(0,0,0,.16);padding:10px 12px;display:flex;align-items:center;gap:8px;font:13px system-ui}.sbCloudBar button{border:0;border-radius:10px;padding:8px 10px;font-weight:800;cursor:pointer}.sbCloudBar .save{background:#0a7d87;color:#fff}.sbCloudBar .load{background:#edf6f8;color:#0a4550}.sbCloudBar .out{background:#ffe9e9;color:#7a1111}.sbStatusDot{width:10px;height:10px;border-radius:99px;background:#bbb}.sbStatusDot.ok{background:#10b981}.sbStatusDot.warn{background:#f59e0b}.sbStatusDot.err{background:#ef4444}
+      .sbGate{position:fixed;inset:0;z-index:999999;background:linear-gradient(135deg,rgba(4,37,50,.88),rgba(28,95,160,.76));display:flex;align-items:center;justify-content:center;padding:24px;color:#12202b}.sbCard{width:min(540px,96vw);background:#fff;border-radius:26px;padding:24px;box-shadow:0 24px 80px rgba(0,0,0,.35);font-family:system-ui,-apple-system,Segoe UI,sans-serif;border:1px solid rgba(255,255,255,.55)}.sbBrand{display:flex;gap:14px;align-items:center;margin-bottom:14px}.sbBrand span{width:58px;height:58px;border-radius:18px;background:linear-gradient(135deg,#c8fff0,#deecff);display:grid;place-items:center;font-size:32px}.sbBrand h1{margin:0;font-size:26px}.sbBrand p{margin:2px 0 0;color:#5a6f7b}.sbCard label{display:block;font-weight:900;color:#324c59;margin:12px 0 6px}.sbCard input,.sbCard select{width:100%;padding:13px 14px;border:1px solid #cfe0e6;border-radius:14px;font:16px system-ui;background:#fff}.sbRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.sbBtn{border:0;border-radius:12px;padding:12px 16px;font-weight:900;cursor:pointer;background:#0a7d87;color:#fff}.sbBtn.secondary{background:#edf6f8;color:#0a4550}.sbMsg{margin-top:12px;padding:10px 12px;border-radius:12px;background:#f4f8fa;color:#244}.sbWarn{background:#fff5d8;color:#5a4300}.sbErr{background:#ffe3e3;color:#7a1111}.sbHint{font-size:12px;color:#647887;margin-top:10px;line-height:1.35}
+      .sbCloudBar{position:fixed;right:14px;bottom:14px;z-index:99998;background:#fff;border:1px solid #cfe0e6;border-radius:18px;box-shadow:0 12px 32px rgba(0,0,0,.16);padding:10px 12px;display:flex;align-items:center;gap:8px;font:13px system-ui}.sbCloudBar button{border:0;border-radius:10px;padding:8px 10px;font-weight:800;cursor:pointer}.sbCloudBar .save{background:#0a7d87;color:#fff}.sbCloudBar .load{background:#edf6f8;color:#0a4550}.sbCloudBar .assets{background:#fff5d8;color:#704b00}.sbCloudBar .out{background:#ffe9e9;color:#7a1111}.sbStatusDot{width:10px;height:10px;border-radius:99px;background:#bbb}.sbStatusDot.ok{background:#10b981}.sbStatusDot.warn{background:#f59e0b}.sbStatusDot.err{background:#ef4444}
+      .assetDiagWrap{position:fixed;inset:0;z-index:999997;background:rgba(5,28,40,.68);display:flex;align-items:flex-start;justify-content:center;padding:24px;overflow:auto}.assetDiag{width:min(1180px,96vw);background:#fff;border-radius:24px;box-shadow:0 24px 80px rgba(0,0,0,.35);padding:18px;font:14px system-ui;color:#12202b}.assetDiagHead{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #dbe6e8;padding-bottom:10px;margin-bottom:12px}.assetDiag table{width:100%;border-collapse:collapse;min-width:760px}.assetDiag th,.assetDiag td{border-bottom:1px solid #e4eef0;padding:8px;text-align:left;vertical-align:top}.assetDiag th{background:#f1f8f7}.assetDiag .ok{color:#057a44;font-weight:900}.assetDiag .missing{color:#b42318;font-weight:900}.assetDiag .warn{color:#9a5b00;font-weight:900}.assetDiag .blocked{color:#6b4eff;font-weight:900}.assetDiag code{font-size:12px;word-break:break-all}.assetDiag .diagScroll{overflow:auto;max-height:52vh}.assetDiag .closeDiag{border:0;border-radius:12px;padding:9px 12px;font-weight:900;background:#edf6f8;color:#0a4550;cursor:pointer}
     `;
     document.head.appendChild(st);
   }
@@ -99,46 +93,47 @@
     try{const {data:profile}=await db().from('profiles').select('*').eq('id',data.profile_id).maybeSingle(); data.profiles=profile||{};}catch(e){data.profiles={};}
     return data;
   }
-  function recoverDashboard(){
-    window.masked=86400000; window.account=0;
-    try{ if(window.KFTP && typeof window.KFTP.switchTab==='function'){ window.KFTP.switchTab((window.KFTP.state&&window.KFTP.state.ui&&window.KFTP.state.ui.tab)||'dash'); } }catch(e){ console.warn('Dashboard recovery retry skipped',e); }
-  }
+  function recoverDashboard(){ window.masked=86400000; window.account=0; try{ if(window.KFTP && typeof window.KFTP.switchTab==='function'){ window.KFTP.switchTab((window.KFTP.state&&window.KFTP.state.ui&&window.KFTP.state.ui.tab)||'dash'); } }catch(e){ console.warn('Dashboard recovery retry skipped',e); } }
   async function completeLogin(reload, expected){try{if(expected)expectedProfileId=expected; appUser=await fetchAppUser(); sessionToLocal(appUser); await loadPlannerState(false); await logAudit('login','Supabase login completed'); removeLocalGate(); const gate=document.getElementById('sbGate'); if(gate)gate.remove(); injectCloudBar(); setTimeout(recoverDashboard,150); if(reload)location.reload();}catch(e){showGate(e.message||String(e),'error');}}
   async function loadPlannerState(showAlert){if(!appUser)appUser=await fetchAppUser(); const scope=CFG.plannerStateScope||'household'; let q=db().from('planner_state').select('*').eq('scope',scope).order('updated_at',{ascending:false}).limit(1); if(scope==='household')q=q.eq('household_id',appUser.household_id); if(scope==='user')q=q.eq('owner_profile_id',appUser.profile_id); const {data,error}=await q; if(error)throw error; if(data&&data[0]&&data[0].state){localStorage.setItem(STORAGE_KEY,JSON.stringify(data[0].state)); setCloudStatus('ok','Loaded from Supabase '+new Date(data[0].updated_at).toLocaleString()); if(showAlert){alert('Loaded planner state from Supabase. The page will refresh.'); location.reload();} return true;} setCloudStatus('warn','No Supabase planner state found yet. Use Save after verifying current data.'); return false;}
-  async function savePlannerState(showAlert){if(!appUser)appUser=await fetchAppUser(); const liveState=(window.KFTP&&window.KFTP.state)||JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'); const scope=CFG.plannerStateScope||'household'; const row={scope,household_id:scope==='household'?appUser.household_id:null,owner_profile_id:scope==='user'?appUser.profile_id:null,state:liveState,version:'v7.2.7',updated_by:(await client.auth.getUser()).data.user.id,updated_at:new Date().toISOString()}; const {error}=await db().from('planner_state').upsert(row,{onConflict:'scope,household_id,owner_profile_id'}); if(error)throw error; await logAudit('planner_state_save','Saved full planner state to Supabase'); setCloudStatus('ok','Saved to Supabase '+new Date().toLocaleTimeString()); if(showAlert)alert('Saved to Supabase.');}
+  async function savePlannerState(showAlert){if(!appUser)appUser=await fetchAppUser(); const liveState=(window.KFTP&&window.KFTP.state)||JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'); const scope=CFG.plannerStateScope||'household'; const row={scope,household_id:scope==='household'?appUser.household_id:null,owner_profile_id:scope==='user'?appUser.profile_id:null,state:liveState,version:'v7.2.8',updated_by:(await client.auth.getUser()).data.user.id,updated_at:new Date().toISOString()}; const {error}=await db().from('planner_state').upsert(row,{onConflict:'scope,household_id,owner_profile_id'}); if(error)throw error; await logAudit('planner_state_save','Saved full planner state to Supabase'); setCloudStatus('ok','Saved to Supabase '+new Date().toLocaleTimeString()); if(showAlert)alert('Saved to Supabase.');}
   async function logAudit(action,detail){try{await db().from('audit_log').insert({actor_user_id:(await client.auth.getUser()).data.user.id,actor_profile_id:appUser&&appUser.profile_id,household_id:appUser&&appUser.household_id,action,table_name:null,detail:{message:detail,url:location.href.split('#')[0]}});}catch(e){}}
-  function injectCloudBar(){injectStyles(); let bar=document.getElementById('sbCloudBar'); if(!bar){bar=document.createElement('div');bar.id='sbCloudBar';bar.className='sbCloudBar';document.body.appendChild(bar);} bar.innerHTML=`<span id="sbDot" class="sbStatusDot warn"></span><span id="sbText">Supabase connected</span><button class="save" id="sbSave">Save</button><button class="load" id="sbLoad">Load</button><button class="out" id="sbOut">Sign out</button>`; document.getElementById('sbSave').onclick=()=>savePlannerState(true).catch(e=>{setCloudStatus('err',e.message);alert(e.message);}); document.getElementById('sbLoad').onclick=()=>loadPlannerState(true).catch(e=>{setCloudStatus('err',e.message);alert(e.message);}); document.getElementById('sbOut').onclick=signOut;}
+
+  function assetCandidates(){
+    const base=['assets/images/KingCrest.PNG','assets/images/people/King3.png','assets/images/pets/Pepper.png','assets/images/pets/June.png','assets/images/ui/dashboard_beach_hero.png'];
+    const out=new Map();
+    const add=(url,source)=>{try{if(!url)return; const full=new URL(String(url).replace(/^url\(["']?/,'').replace(/["']?\)$/,''),document.baseURI).href; out.set(full,{url:full,source});}catch(e){}};
+    base.forEach(u=>add(u,'critical path'));
+    document.querySelectorAll('img').forEach(img=>add(img.currentSrc||img.src||img.getAttribute('src'),'visible img'));
+    try{const st=(window.KFTP&&window.KFTP.state)||{}; const walk=v=>{if(!v)return; if(typeof v==='string' && (v.includes('assets/images/')||/\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(v))) add(v,'planner state'); else if(Array.isArray(v)) v.slice(0,200).forEach(walk); else if(typeof v==='object') Object.keys(v).slice(0,200).forEach(k=>walk(v[k]));}; walk(st);}catch(e){}
+    return Array.from(out.values()).slice(0,250);
+  }
+  function testImage(item){return new Promise(resolve=>{const img=new Image(); let done=false; const finish=(status,detail)=>{if(done)return; done=true; resolve({...item,status,detail});}; const timer=setTimeout(()=>finish('blocked','Timed out or blocked'),6000); img.onload=()=>{clearTimeout(timer);finish('ok','Loaded')}; img.onerror=()=>{clearTimeout(timer);finish('missing','Failed to load')}; img.src=item.url+(item.url.includes('?')?'&':'?')+'diag='+Date.now();});}
+  async function storageChecks(){const buckets=['kftp-public-assets','kftp-profile-photos','kftp-loyalty-cards','kftp-travel-documents','kftp-trip-attachments','kftp-pet-care']; const rows=[]; for(const b of buckets){try{const {data,error}=await client.storage.from(b).list('',{limit:1}); rows.push({bucket:b,status:error?'missing':'ok',detail:error?error.message:((data||[]).length+' item(s) visible')});}catch(e){rows.push({bucket:b,status:'blocked',detail:e.message||String(e)});}} return rows;}
+  async function runAssetDiagnostics(){
+    injectStyles(); setCloudStatus('warn','Running asset diagnostics...');
+    const old=document.getElementById('assetDiagModal'); if(old)old.remove();
+    const modal=document.createElement('div'); modal.id='assetDiagModal'; modal.className='assetDiagWrap'; modal.innerHTML='<div class="assetDiag"><div class="assetDiagHead"><div><h2>Asset Diagnostics</h2><p>Checking public images, planner-state image paths, Supabase Storage buckets, and app.asset_files.</p></div><button class="closeDiag" id="assetDiagClose">Close</button></div><div id="assetDiagBody">Running checks...</div></div>'; document.body.appendChild(modal); document.getElementById('assetDiagClose').onclick=()=>modal.remove();
+    const body=document.getElementById('assetDiagBody'); const candidates=assetCandidates(); const results=[]; for(const c of candidates){results.push(await testImage(c)); body.textContent='Checked '+results.length+' of '+candidates.length+' assets...';}
+    const buckets=await storageChecks(); let assetTable={status:'missing',detail:'not checked',rows:[]}; try{const {data,error}=await db().from('asset_files').select('id,bucket,storage_path,asset_kind,display_name,created_at').order('created_at',{ascending:false}).limit(20); assetTable=error?{status:'missing',detail:error.message,rows:[]}:{status:'ok',detail:'app.asset_files reachable',rows:data||[]};}catch(e){assetTable={status:'missing',detail:e.message||String(e),rows:[]};}
+    const counts=results.reduce((a,x)=>(a[x.status]=(a[x.status]||0)+1,a),{}); const bucketCounts=buckets.reduce((a,x)=>(a[x.status]=(a[x.status]||0)+1,a),{});
+    const imgRows=results.map(x=>`<tr><td class="${esc(x.status)}">${esc(x.status)}</td><td>${esc(x.source)}</td><td><code>${esc(x.url)}</code></td><td>${esc(x.detail)}</td></tr>`).join('');
+    const bRows=buckets.map(x=>`<tr><td class="${esc(x.status)}">${esc(x.status)}</td><td><code>${esc(x.bucket)}</code></td><td>${esc(x.detail)}</td></tr>`).join('');
+    const aRows=(assetTable.rows||[]).map(x=>`<tr><td>${esc(x.asset_kind)}</td><td><code>${esc(x.bucket)}</code></td><td><code>${esc(x.storage_path)}</code></td><td>${esc(x.display_name||'')}</td></tr>`).join('') || `<tr><td colspan="4" class="${assetTable.status==='ok'?'warn':'missing'}">${esc(assetTable.detail||'No asset records found yet')}</td></tr>`;
+    body.innerHTML=`<p><b>Summary:</b> ${counts.ok||0} image OK, ${counts.missing||0} missing, ${counts.blocked||0} blocked. Storage: ${bucketCounts.ok||0} reachable, ${bucketCounts.missing||0} missing.</p><h3>Supabase Storage</h3><div class="diagScroll"><table><thead><tr><th>Status</th><th>Bucket</th><th>Detail</th></tr></thead><tbody>${bRows}</tbody></table></div><h3>app.asset_files</h3><div class="diagScroll"><table><thead><tr><th>Kind</th><th>Bucket</th><th>Path</th><th>Name</th></tr></thead><tbody>${aRows}</tbody></table></div><h3>Image checks</h3><div class="diagScroll"><table><thead><tr><th>Status</th><th>Source</th><th>URL</th><th>Detail</th></tr></thead><tbody>${imgRows}</tbody></table></div>`;
+    setCloudStatus((counts.missing||bucketCounts.missing)?'warn':'ok','Asset diagnostics complete'); await logAudit('asset_diagnostics','Ran asset diagnostics');
+  }
+
+  function injectCloudBar(){injectStyles(); let bar=document.getElementById('sbCloudBar'); if(!bar){bar=document.createElement('div');bar.id='sbCloudBar';bar.className='sbCloudBar';document.body.appendChild(bar);} bar.innerHTML=`<span id="sbDot" class="sbStatusDot warn"></span><span id="sbText">Supabase connected</span><button class="save" id="sbSave">Save</button><button class="load" id="sbLoad">Load</button><button class="assets" id="sbAssets">Assets</button><button class="out" id="sbOut">Sign out</button>`; document.getElementById('sbSave').onclick=()=>savePlannerState(true).catch(e=>{setCloudStatus('err',e.message);alert(e.message);}); document.getElementById('sbLoad').onclick=()=>loadPlannerState(true).catch(e=>{setCloudStatus('err',e.message);alert(e.message);}); document.getElementById('sbAssets').onclick=()=>runAssetDiagnostics().catch(e=>{setCloudStatus('err',e.message);alert(e.message);}); document.getElementById('sbOut').onclick=signOut;}
   function setCloudStatus(kind,text){const d=document.getElementById('sbDot'),t=document.getElementById('sbText'); if(d)d.className='sbStatusDot '+(kind||''); if(t)t.textContent=text||'';}
   async function signOut(){try{await logAudit('logout','Supabase logout'); await client.auth.signOut();}catch(e){} localStorage.removeItem(AUTH_SESSION_KEY); location.reload();}
-
-  function isLegacyTopLogoutTarget(target){
-    const el = target && target.closest ? target.closest('button,a,[role="button"],input') : null;
-    if(!el) return false;
-    const text = String(el.textContent || el.value || '').trim().toLowerCase();
-    return text === 'logout' || text === 'switch user';
-  }
-  function captureLegacyTopLogout(e){
-    if(!isLegacyTopLogoutTarget(e.target)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if(e.stopImmediatePropagation) e.stopImmediatePropagation();
-    signOut();
-  }
+  function isLegacyTopLogoutTarget(target){const el=target&&target.closest?target.closest('button,a,[role="button"],input'):null; if(!el)return false; const text=String(el.textContent||el.value||'').trim().toLowerCase(); return text==='logout'||text==='switch user';}
+  function captureLegacyTopLogout(e){if(!isLegacyTopLogoutTarget(e.target))return; e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation)e.stopImmediatePropagation(); signOut();}
   ['pointerdown','mousedown','touchstart','click'].forEach(evt=>document.addEventListener(evt,captureLegacyTopLogout,true));
-  function bindLegacyTopLogout(){
-    document.querySelectorAll('button,a,[role="button"],input').forEach(el=>{
-      const text=String(el.textContent || el.value || '').trim().toLowerCase();
-      if(text === 'logout' || text === 'switch user'){
-        el.onclick=function(ev){if(ev){ev.preventDefault();ev.stopPropagation();} signOut(); return false;};
-        el.onmousedown=el.onclick;
-        el.onpointerdown=el.onclick;
-      }
-    });
-  }
+  function bindLegacyTopLogout(){document.querySelectorAll('button,a,[role="button"],input').forEach(el=>{const text=String(el.textContent||el.value||'').trim().toLowerCase(); if(text==='logout'||text==='switch user'){el.onclick=function(ev){if(ev){ev.preventDefault();ev.stopPropagation();} signOut(); return false;}; el.onmousedown=el.onclick; el.onpointerdown=el.onclick;}});}
   setInterval(bindLegacyTopLogout,500);
-
   function startAutosave(){const secs=Number(CFG.autosaveSeconds||0); if(!secs||secs<20)return; if(autosaveTimer)clearInterval(autosaveTimer); autosaveTimer=setInterval(()=>savePlannerState(false).catch(e=>setCloudStatus('err','Autosave failed: '+e.message)),secs*1000);}
   async function init(){if(initialized)return; initialized=true; if(!configured()){console.warn('KFTP Supabase bridge not configured.'); return;} injectStyles(); client=window.supabase.createClient(CFG.url,CFG.anonKey,{db:{schema:DB_SCHEMA},auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}); setInterval(()=>{if(!appUser)removeLocalGate();},250); const {data}=await client.auth.getSession(); if(!data.session){showGate('Select Stephen King and sign in with username steve.'); return;} await completeLogin(false); startAutosave();}
-  window.KFTP_SUPABASE={init,savePlannerState,loadPlannerState,signOut,get client(){return client},get appUser(){return appUser}};
+  window.KFTP_SUPABASE={init,savePlannerState,loadPlannerState,runAssetDiagnostics,signOut,get client(){return client},get appUser(){return appUser}};
   window.addEventListener('DOMContentLoaded',()=>setTimeout(()=>init().catch(e=>showGate(e.message||String(e),'error')),120));
 })();
