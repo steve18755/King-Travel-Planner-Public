@@ -1,6 +1,7 @@
-/* King Family Travel Planner v7.2 Supabase bridge
-   Pass 1: Supabase Auth owns login/logout while preserving the family-member login UX.
+/* King Family Travel Planner v7.2.8 Supabase bridge
+   Pass 1/repair: Supabase Auth owns login/logout while preserving the family-member login UX.
    Canonical state is app.planner_state. localStorage is used only as a browser cache/runtime buffer.
+   Hotfix: actively repopulate the top user bar used by the current index.html.
 */
 (function(){
   const CFG = window.KFTP_SUPABASE_CONFIG || {};
@@ -27,6 +28,9 @@
   ];
   let client=null, appUser=null, initialized=false, autosaveTimer=null, expectedProfileId=null;
 
+  window.masked = 86400000;
+  window.account = 0;
+
   function configured(){ return !!(CFG && CFG.mode !== 'local-demo' && CFG.url && CFG.anonKey && window.supabase && window.supabase.createClient); }
   function esc(s){return String(s??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
   function qs(sel){return document.querySelector(sel)}
@@ -34,6 +38,9 @@
   function familyByLocal(local){ return FAMILY_LOGIN_OPTIONS.find(f=>f.local===local) || FAMILY_LOGIN_OPTIONS[0]; }
   function normalizeLogin(s){ return String(s||'').trim().toLowerCase(); }
   function emailLooksValid(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s||'')); }
+  function currentSession(){ try{return JSON.parse(localStorage.getItem(AUTH_SESSION_KEY)||'null')}catch(e){return null} }
+  function stateProfiles(){ try{return (window.KFTP&&window.KFTP.state&&window.KFTP.state.familyProfiles)||[]}catch(e){return []} }
+
   function resolveEmail(local, usernameOrEmail){
     const fam=familyByLocal(local);
     const raw=String(usernameOrEmail||'').trim();
@@ -64,6 +71,34 @@
     }
     return s;
   }
+
+  function householdName(s){
+    const raw=(s&&s.household_id)||(appUser&&appUser.household_id)||'stephen_household';
+    const map={stephen_household:'Stephen King Household',david_household:'David King Household',joshua_household:'Joshua King Household',michael_household:'Michael King Household',elaire_household:'Elaire Ward Household'};
+    return map[raw] || String(raw).replace(/_/g,' ');
+  }
+  function householdMembers(s){
+    const hh=(s&&s.household_id)||(appUser&&appUser.household_id)||'stephen_household';
+    const names=stateProfiles().filter(p=>p.household_id===hh).map(p=>p.name||p.display_name||p.id).filter(Boolean);
+    return names.length ? names.join(', ') : 'Stephen King, Selma Ward, Ashly King';
+  }
+  function ensureUserBar(){
+    const s=currentSession();
+    if(!s) return;
+    injectStyles();
+    let bar=document.getElementById('topUserBar');
+    if(!bar){
+      const main=document.querySelector('.main') || document.querySelector('main') || document.body;
+      bar=document.createElement('div');
+      bar.id='topUserBar';
+      bar.className='topUserBar';
+      if(main.firstChild) main.insertBefore(bar, main.firstChild); else main.appendChild(bar);
+    }
+    bar.innerHTML=`<div class="topUserLeft"><div class="avatarIcon" style="width:42px;height:42px;border-radius:16px;font-size:24px">👤</div><div><b>Logged in as</b><br><strong>${esc(s.name||'Supabase user')}</strong></div><span class="pill ok">${esc(s.role||'user')}</span><div><b>${esc(householdName(s))}</b><br><span class="small">${esc(householdMembers(s))}</span></div></div><div class="topUserRight"><span class="small"><b>View</b></span><button class="btn sm ghost" type="button">Top</button><button class="btn sm ghost" type="button">Left</button><button class="btn sm ghost" type="button">Day</button><button class="btn sm ghost" id="topSwitchUserBtn" type="button">Switch User</button><button class="btn sm ghost" id="topLogoutBtn" type="button">Logout</button></div>`;
+    const lo=document.getElementById('topLogoutBtn'); if(lo) lo.onclick=signOut;
+    const sw=document.getElementById('topSwitchUserBtn'); if(sw) sw.onclick=signOut;
+  }
+
   function injectStyles(){
     if(document.getElementById('kftpSupabaseStyles')) return;
     const st=document.createElement('style'); st.id='kftpSupabaseStyles';
@@ -73,6 +108,7 @@
       .sbBrand{display:flex;gap:14px;align-items:center;margin-bottom:14px}.sbBrand span{width:58px;height:58px;border-radius:18px;background:linear-gradient(135deg,#c8fff0,#deecff);display:grid;place-items:center;font-size:32px}.sbBrand h1{margin:0;font-size:26px}.sbBrand p{margin:2px 0 0;color:#5a6f7b}
       .sbCard label{display:block;font-weight:900;color:#324c59;margin:12px 0 6px}.sbCard input,.sbCard select{width:100%;padding:13px 14px;border:1px solid #cfe0e6;border-radius:14px;font:16px system-ui;background:#fff}.sbRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.sbBtn{border:0;border-radius:12px;padding:12px 16px;font-weight:900;cursor:pointer;background:#0a7d87;color:#fff}.sbBtn.secondary{background:#edf6f8;color:#0a4550}.sbMsg{margin-top:12px;padding:10px 12px;border-radius:12px;background:#f4f8fa;color:#244}.sbWarn{background:#fff5d8;color:#5a4300}.sbErr{background:#ffe3e3;color:#7a1111}.sbHint{font-size:12px;color:#647887;margin-top:10px;line-height:1.35}
       .sbCloudBar{position:fixed;right:14px;bottom:14px;z-index:99998;background:#fff;border:1px solid #cfe0e6;border-radius:18px;box-shadow:0 12px 32px rgba(0,0,0,.16);padding:10px 12px;display:flex;align-items:center;gap:8px;font:13px system-ui}.sbCloudBar button{border:0;border-radius:10px;padding:8px 10px;font-weight:800;cursor:pointer}.sbCloudBar .save{background:#0a7d87;color:#fff}.sbCloudBar .load{background:#edf6f8;color:#0a4550}.sbCloudBar .out{background:#ffe9e9;color:#7a1111}.sbStatusDot{width:10px;height:10px;border-radius:99px;background:#bbb}.sbStatusDot.ok{background:#10b981}.sbStatusDot.warn{background:#f59e0b}.sbStatusDot.err{background:#ef4444}
+      #topUserBar,.topUserBar{background:linear-gradient(90deg,#054c51,#0a7d78);color:#fff;border-radius:0 0 16px 16px;padding:12px 16px;margin:0 -24px 22px;display:flex;justify-content:space-between;align-items:center;gap:14px;box-shadow:0 8px 18px rgba(0,0,0,.12);position:relative;z-index:50}#topUserBar .topUserLeft,#topUserBar .topUserRight,.topUserBar .topUserLeft,.topUserBar .topUserRight{display:flex;align-items:center;gap:12px;flex-wrap:wrap}#topUserBar .pill,.topUserBar .pill{background:#dffbef;color:#075f41;border:0}#topUserBar .btn,.topUserBar .btn{background:#eef8fb;color:#073548}#topUserBar .small,.topUserBar .small{color:#dff6f4}
     `;
     document.head.appendChild(st);
   }
@@ -99,7 +135,7 @@
     }
     if(message) setMsg(message,kind);
   }
-  function setMsg(text,kind){const m=document.getElementById('sbMsg'); if(m){m.className='sbMsg '+(kind==='error'?'sbErr':kind==='warn'?'sbWarn':''); m.textContent=text;}}
+  function setMsg(text,kind){const m=document.getElementById('sbMsg'); if(m){m.className='sbMsg '+(kind==='error'?'sbErr':kind==='warn'?''); m.textContent=text;}}
   async function signIn(local,username,password){
     try{
       const fam=familyByLocal(local);
@@ -176,6 +212,7 @@
       removeLocalGate();
       const gate=document.getElementById('sbGate'); if(gate) gate.remove();
       injectCloudBar();
+      ensureUserBar();
       if(reload) location.reload();
     }catch(e){
       showGate(e.message || String(e),'error');
@@ -203,7 +240,7 @@
     if(!appUser) appUser=await fetchAppUser();
     const liveState=(window.KFTP && window.KFTP.state) || JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
     const scope=CFG.plannerStateScope || 'household';
-    const row={scope, household_id: scope==='household'?appUser.household_id:null, owner_profile_id: scope==='user'?appUser.profile_id:null, state: liveState, version:'v7.2', updated_by:(await client.auth.getUser()).data.user.id, updated_at:new Date().toISOString()};
+    const row={scope, household_id: scope==='household'?appUser.household_id:null, owner_profile_id: scope==='user'?appUser.profile_id:null, state: liveState, version:'v7.2.8', updated_by:(await client.auth.getUser()).data.user.id, updated_at:new Date().toISOString()};
     const {error}=await db().from('planner_state').upsert(row,{onConflict:'scope,household_id,owner_profile_id'});
     if(error) throw error;
     await logAudit('planner_state_save','Saved full planner state to Supabase');
@@ -224,6 +261,32 @@
   }
   function setCloudStatus(kind,text){const d=document.getElementById('sbDot'), t=document.getElementById('sbText'); if(d)d.className='sbStatusDot '+(kind||''); if(t)t.textContent=text||'';}
   async function signOut(){try{await logAudit('logout','Supabase logout'); await client.auth.signOut();}catch(e){} localStorage.removeItem(AUTH_SESSION_KEY); location.reload();}
+
+  function isLegacyTopLogoutTarget(target){
+    const el = target && target.closest ? target.closest('button,a,[role="button"],input') : null;
+    if(!el) return false;
+    const text = String(el.textContent || el.value || '').trim().toLowerCase();
+    return text === 'logout' || text === 'switch user';
+  }
+  function captureLegacyTopLogout(e){
+    if(!isLegacyTopLogoutTarget(e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if(e.stopImmediatePropagation) e.stopImmediatePropagation();
+    signOut();
+  }
+  ['pointerdown','mousedown','touchstart','click'].forEach(evt=>document.addEventListener(evt,captureLegacyTopLogout,true));
+  function bindLegacyTopLogout(){
+    document.querySelectorAll('button,a,[role="button"],input').forEach(el=>{
+      const text=String(el.textContent || el.value || '').trim().toLowerCase();
+      if(text === 'logout' || text === 'switch user'){
+        el.onclick=function(ev){if(ev){ev.preventDefault();ev.stopPropagation();} signOut(); return false;};
+        el.onmousedown=el.onclick;
+        el.onpointerdown=el.onclick;
+      }
+    });
+  }
+
   function startAutosave(){
     const secs=Number(CFG.autosaveSeconds||0); if(!secs || secs<20) return;
     if(autosaveTimer) clearInterval(autosaveTimer);
@@ -240,6 +303,7 @@
     await completeLogin(false);
     startAutosave();
   }
-  window.KFTP_SUPABASE = { init, savePlannerState, loadPlannerState, signOut, get client(){return client}, get appUser(){return appUser} };
+  setInterval(()=>{ bindLegacyTopLogout(); ensureUserBar(); },700);
+  window.KFTP_SUPABASE = { init, savePlannerState, loadPlannerState, signOut, ensureUserBar, get client(){return client}, get appUser(){return appUser} };
   window.addEventListener('DOMContentLoaded',()=>setTimeout(()=>init().catch(e=>showGate(e.message||String(e),'error')),120));
 })();
