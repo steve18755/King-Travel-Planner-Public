@@ -6,6 +6,20 @@
   const AUTH_SESSION_KEY='kftp_v31_auth_session';
   const ADMIN_LOG_KEY='kftp_admin_activity_log_v33';
   const cfg=window.KFTP_CONFIG||{};
+  // Supabase mode owns authentication. Do not display the old v5.2 local login gate
+  // when the secure Supabase bridge/config is present.
+  function supabaseModeActive(){
+    const sc = window.KFTP_SUPABASE_CONFIG || {};
+    return !!(sc && sc.mode === 'supabase' && sc.url && sc.anonKey);
+  }
+  function localGateDisabled(){
+    return supabaseModeActive() || !!(cfg.localSecurity && cfg.localSecurity.enabled === false);
+  }
+  function removeLocalOverlayOnly(){
+    const o=document.getElementById('authOverlay');
+    if(o) o.remove();
+    document.body.classList.remove('authLocked');
+  }
   const family=[
     {id:'stephen',name:'Stephen King',email:'stephen.private@example.com',role:'admin'},
     {id:'selma',name:'Selma Ward',email:'selma.private@example.com',role:'family'},
@@ -104,6 +118,7 @@
     }
   }
   function showGate(){
+    if(localGateDisabled()){ removeLocalOverlayOnly(); return; }
     if(!$('authOverlay'))document.body.insertAdjacentHTML('beforeend',authBox());
     $('authForm').onsubmit=handleAuth;
     $('authProfile').onchange=updateConfirmVisibility;
@@ -111,6 +126,7 @@
     document.body.classList.add('authLocked');
   }
   function applyAccess(){
+    if(localGateDisabled()){ removeLocalOverlayOnly(); return; }
     const s=session();
     const overlay=$('authOverlay'); if(overlay)overlay.remove();
     if(!s){showGate(); return;}
@@ -120,5 +136,10 @@
     window.KFTP_AUTH={enabled:true,role:s.role,currentUser:s,requireAdmin:isAdmin,logout:()=>{let s=session()||{};localLog('Logout',{name:s.name,role:s.role,detail:'Programmatic logout'});clearSession();location.reload();}};
   }
   window.KFTP_LOCAL_AUTH={applyAccess,isAdmin,currentProfile,logout:()=>{let s=session()||{};localLog('Logout',{name:s.name,role:s.role,detail:'Programmatic logout'});clearSession();location.reload();}};
-  window.addEventListener('DOMContentLoaded',()=>setTimeout(applyAccess,80));
+  window.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{
+    if(localGateDisabled()){ removeLocalOverlayOnly(); return; }
+    applyAccess();
+  },80));
+  // In case supabase-config.js loads after this file, keep the prototype gate suppressed once Supabase mode is detected.
+  setInterval(()=>{ if(localGateDisabled()) removeLocalOverlayOnly(); }, 500);
 })();
