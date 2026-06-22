@@ -1,4 +1,4 @@
-/* King Family Travel Planner v7.2.6 active Supabase bridge
+/* King Family Travel Planner v7.2.7 active Supabase bridge
    Supabase Auth owns login/logout. This file is the one loaded by the current index.html.
    It also repairs the legacy privacy-mask arithmetic placeholder used by the dashboard renderer.
 */
@@ -105,11 +105,38 @@
   }
   async function completeLogin(reload, expected){try{if(expected)expectedProfileId=expected; appUser=await fetchAppUser(); sessionToLocal(appUser); await loadPlannerState(false); await logAudit('login','Supabase login completed'); removeLocalGate(); const gate=document.getElementById('sbGate'); if(gate)gate.remove(); injectCloudBar(); setTimeout(recoverDashboard,150); if(reload)location.reload();}catch(e){showGate(e.message||String(e),'error');}}
   async function loadPlannerState(showAlert){if(!appUser)appUser=await fetchAppUser(); const scope=CFG.plannerStateScope||'household'; let q=db().from('planner_state').select('*').eq('scope',scope).order('updated_at',{ascending:false}).limit(1); if(scope==='household')q=q.eq('household_id',appUser.household_id); if(scope==='user')q=q.eq('owner_profile_id',appUser.profile_id); const {data,error}=await q; if(error)throw error; if(data&&data[0]&&data[0].state){localStorage.setItem(STORAGE_KEY,JSON.stringify(data[0].state)); setCloudStatus('ok','Loaded from Supabase '+new Date(data[0].updated_at).toLocaleString()); if(showAlert){alert('Loaded planner state from Supabase. The page will refresh.'); location.reload();} return true;} setCloudStatus('warn','No Supabase planner state found yet. Use Save after verifying current data.'); return false;}
-  async function savePlannerState(showAlert){if(!appUser)appUser=await fetchAppUser(); const liveState=(window.KFTP&&window.KFTP.state)||JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'); const scope=CFG.plannerStateScope||'household'; const row={scope,household_id:scope==='household'?appUser.household_id:null,owner_profile_id:scope==='user'?appUser.profile_id:null,state:liveState,version:'v7.2.6',updated_by:(await client.auth.getUser()).data.user.id,updated_at:new Date().toISOString()}; const {error}=await db().from('planner_state').upsert(row,{onConflict:'scope,household_id,owner_profile_id'}); if(error)throw error; await logAudit('planner_state_save','Saved full planner state to Supabase'); setCloudStatus('ok','Saved to Supabase '+new Date().toLocaleTimeString()); if(showAlert)alert('Saved to Supabase.');}
+  async function savePlannerState(showAlert){if(!appUser)appUser=await fetchAppUser(); const liveState=(window.KFTP&&window.KFTP.state)||JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'); const scope=CFG.plannerStateScope||'household'; const row={scope,household_id:scope==='household'?appUser.household_id:null,owner_profile_id:scope==='user'?appUser.profile_id:null,state:liveState,version:'v7.2.7',updated_by:(await client.auth.getUser()).data.user.id,updated_at:new Date().toISOString()}; const {error}=await db().from('planner_state').upsert(row,{onConflict:'scope,household_id,owner_profile_id'}); if(error)throw error; await logAudit('planner_state_save','Saved full planner state to Supabase'); setCloudStatus('ok','Saved to Supabase '+new Date().toLocaleTimeString()); if(showAlert)alert('Saved to Supabase.');}
   async function logAudit(action,detail){try{await db().from('audit_log').insert({actor_user_id:(await client.auth.getUser()).data.user.id,actor_profile_id:appUser&&appUser.profile_id,household_id:appUser&&appUser.household_id,action,table_name:null,detail:{message:detail,url:location.href.split('#')[0]}});}catch(e){}}
   function injectCloudBar(){injectStyles(); let bar=document.getElementById('sbCloudBar'); if(!bar){bar=document.createElement('div');bar.id='sbCloudBar';bar.className='sbCloudBar';document.body.appendChild(bar);} bar.innerHTML=`<span id="sbDot" class="sbStatusDot warn"></span><span id="sbText">Supabase connected</span><button class="save" id="sbSave">Save</button><button class="load" id="sbLoad">Load</button><button class="out" id="sbOut">Sign out</button>`; document.getElementById('sbSave').onclick=()=>savePlannerState(true).catch(e=>{setCloudStatus('err',e.message);alert(e.message);}); document.getElementById('sbLoad').onclick=()=>loadPlannerState(true).catch(e=>{setCloudStatus('err',e.message);alert(e.message);}); document.getElementById('sbOut').onclick=signOut;}
   function setCloudStatus(kind,text){const d=document.getElementById('sbDot'),t=document.getElementById('sbText'); if(d)d.className='sbStatusDot '+(kind||''); if(t)t.textContent=text||'';}
   async function signOut(){try{await logAudit('logout','Supabase logout'); await client.auth.signOut();}catch(e){} localStorage.removeItem(AUTH_SESSION_KEY); location.reload();}
+
+  function isLegacyTopLogoutTarget(target){
+    const el = target && target.closest ? target.closest('button,a,[role="button"],input') : null;
+    if(!el) return false;
+    const text = String(el.textContent || el.value || '').trim().toLowerCase();
+    return text === 'logout' || text === 'switch user';
+  }
+  function captureLegacyTopLogout(e){
+    if(!isLegacyTopLogoutTarget(e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if(e.stopImmediatePropagation) e.stopImmediatePropagation();
+    signOut();
+  }
+  ['pointerdown','mousedown','touchstart','click'].forEach(evt=>document.addEventListener(evt,captureLegacyTopLogout,true));
+  function bindLegacyTopLogout(){
+    document.querySelectorAll('button,a,[role="button"],input').forEach(el=>{
+      const text=String(el.textContent || el.value || '').trim().toLowerCase();
+      if(text === 'logout' || text === 'switch user'){
+        el.onclick=function(ev){if(ev){ev.preventDefault();ev.stopPropagation();} signOut(); return false;};
+        el.onmousedown=el.onclick;
+        el.onpointerdown=el.onclick;
+      }
+    });
+  }
+  setInterval(bindLegacyTopLogout,500);
+
   function startAutosave(){const secs=Number(CFG.autosaveSeconds||0); if(!secs||secs<20)return; if(autosaveTimer)clearInterval(autosaveTimer); autosaveTimer=setInterval(()=>savePlannerState(false).catch(e=>setCloudStatus('err','Autosave failed: '+e.message)),secs*1000);}
   async function init(){if(initialized)return; initialized=true; if(!configured()){console.warn('KFTP Supabase bridge not configured.'); return;} injectStyles(); client=window.supabase.createClient(CFG.url,CFG.anonKey,{db:{schema:DB_SCHEMA},auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}); setInterval(()=>{if(!appUser)removeLocalGate();},250); const {data}=await client.auth.getSession(); if(!data.session){showGate('Select Stephen King and sign in with username steve.'); return;} await completeLogin(false); startAutosave();}
   window.KFTP_SUPABASE={init,savePlannerState,loadPlannerState,signOut,get client(){return client},get appUser(){return appUser}};
