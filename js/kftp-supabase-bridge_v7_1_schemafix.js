@@ -1,9 +1,10 @@
-/* King Family Travel Planner v7.0 Supabase bridge
+/* King Family Travel Planner v7.1 Supabase bridge
    Purpose: move the working single-file planner from local-only data to Supabase-backed login and online state.
    Canonical state is app.planner_state. localStorage is used only as a browser cache/runtime buffer.
 */
 (function(){
   const CFG = window.KFTP_SUPABASE_CONFIG || {};
+  const DB_SCHEMA = CFG.dbSchema || 'app';
   const STORAGE_KEY = (window.KFTP_CONFIG && window.KFTP_CONFIG.storageKey) || 'kingTravelPlannerV30';
   const AUTH_SESSION_KEY = 'kftp_v31_auth_session';
   const PROFILE_TO_LOCAL = {
@@ -17,12 +18,20 @@
   function qs(sel){return document.querySelector(sel)}
   function sessionToLocal(row){
     if(!row) return null;
+    const profile = row.profiles || row.profile || {};
     const localId = PROFILE_TO_LOCAL[row.profile_id] || row.profile_id;
-    const name = (row.profiles && row.profiles.display_name) || localId;
-    const s = { profileId: localId, name, role: row.role, loginAt: new Date().toISOString(), supabase:true, household_id: row.household_id, profile_uuid: row.profile_id };
+    const displayName =
+      profile.display_name ||
+      profile.name ||
+      [profile.first_name, profile.last_name].filter(Boolean).join(' ') ||
+      localId;
+    const s = { profileId: localId, name: displayName, role: row.role, loginAt: new Date().toISOString(), supabase:true, household_id: row.household_id, profile_uuid: row.profile_id };
     localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s));
     window.KFTP_AUTH = { enabled:true, role:row.role, currentUser:s, requireAdmin:()=>row.role==='admin', logout:signOut };
     return s;
+  }
+  function db(){
+    return client && typeof client.schema === 'function' ? client.schema(DB_SCHEMA) : client;
   }
   function injectStyles(){
     if(document.getElementById('kftpSupabaseStyles')) return;
@@ -68,9 +77,33 @@
     setMsg('Magic link sent. Check email.','warn');
   }
   async function fetchAppUser(){
-    const {data,error}=await client.from('app_users').select('auth_user_id,profile_id,household_id,role,approved,profiles(display_name)').single();
+    const {data:userData,error:userError}=await client.auth.getUser();
+    if(userError) throw userError;
+    const user = userData && userData.user;
+    if(!user) throw new Error('No active Supabase Auth user session.');
+
+    const {data,error}=await db()
+      .from('app_users')
+      .select('auth_user_id,profile_id,household_id,role,approved')
+      .eq('auth_user_id', user.id)
+      .maybeSingle();
+
     if(error) throw error;
-    if(!data || !data.approved) throw new Error('This login exists, but it is not linked/approved in app.app_users yet.');
+    if(!data) throw new Error('This login exists in Supabase Auth, but it is not linked in app.app_users yet.');
+    if(!data.approved) throw new Error('This login exists, but it is not approved in app.app_users yet.');
+
+    // Fetch profile separately instead of relying on PostgREST embedded relationships.
+    // This avoids schema-cache relationship errors while the database is still being set up.
+    try{
+      const {data:profile,error:profileError}=await db()
+        .from('profiles')
+        .select('*')
+        .eq('id', data.profile_id)
+        .maybeSingle();
+      if(!profileError) data.profiles = profile || {};
+    }catch(e){
+      data.profiles = {};
+    }
     return data;
   }
   async function completeLogin(reload){
@@ -89,7 +122,7 @@
   async function loadPlannerState(showAlert){
     if(!appUser) appUser=await fetchAppUser();
     const scope=CFG.plannerStateScope || 'household';
-    let q=client.from('planner_state').select('*').eq('scope',scope).order('updated_at',{ascending:false}).limit(1);
+    let q=db().from('planner_state').select('*').eq('scope',scope).order('updated_at',{ascending:false}).limit(1);
     if(scope==='household') q=q.eq('household_id',appUser.household_id);
     if(scope==='user') q=q.eq('owner_profile_id',appUser.profile_id);
     const {data,error}=await q;
@@ -108,15 +141,15 @@
     if(!appUser) appUser=await fetchAppUser();
     const liveState=(window.KFTP && window.KFTP.state) || JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
     const scope=CFG.plannerStateScope || 'household';
-    const row={scope, household_id: scope==='household'?appUser.household_id:null, owner_profile_id: scope==='user'?appUser.profile_id:null, state: liveState, version:'v7.0', updated_by:(await client.auth.getUser()).data.user.id, updated_at:new Date().toISOString()};
-    const {error}=await client.from('planner_state').upsert(row,{onConflict:'scope,household_id,owner_profile_id'});
+    const row={scope, household_id: scope==='household'?appUser.household_id:null, owner_profile_id: scope==='user'?appUser.profile_id:null, state: liveState, version:'v7.1', updated_by:(await client.auth.getUser()).data.user.id, updated_at:new Date().toISOString()};
+    const {error}=await db().from('planner_state').upsert(row,{onConflict:'scope,household_id,owner_profile_id'});
     if(error) throw error;
     await logAudit('planner_state_save','Saved full planner state to Supabase');
     setCloudStatus('ok','Saved to Supabase '+new Date().toLocaleTimeString());
     if(showAlert) alert('Saved to Supabase.');
   }
   async function logAudit(action,detail){
-    try{await client.from('audit_log').insert({actor_user_id:(await client.auth.getUser()).data.user.id, actor_profile_id:appUser&&appUser.profile_id, household_id:appUser&&appUser.household_id, action, table_name:null, detail:{message:detail, url:location.href.split('#')[0]}});}catch(e){}
+    try{await db().from('audit_log').insert({actor_user_id:(await client.auth.getUser()).data.user.id, actor_profile_id:appUser&&appUser.profile_id, household_id:appUser&&appUser.household_id, action, table_name:null, detail:{message:detail, url:location.href.split('#')[0]}});}catch(e){}
   }
   function injectCloudBar(){
     injectStyles();
@@ -138,7 +171,7 @@
     if(initialized) return; initialized=true;
     if(!configured()){ console.warn('KFTP Supabase bridge not configured. Using public-safe local demo mode.'); return; }
     injectStyles();
-    client=window.supabase.createClient(CFG.url, CFG.anonKey, {auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:true}});
+    client=window.supabase.createClient(CFG.url, CFG.anonKey, {db:{schema:DB_SCHEMA}, auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:true}});
     // Remove local gate that may be inserted by the prototype auth script.
     setInterval(()=>{ if(!appUser) removeLocalGate(); }, 250);
     const {data}=await client.auth.getSession();

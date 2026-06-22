@@ -5,6 +5,7 @@ window.KFTP_SUPABASE_CONFIG = {
   url: "https://vguuedcyfzgqbaakhurg.supabase.co",
   anonKey: "sb_publishable_iZkN-HzBToLxfgdzIScFUA_GX1hkCTo",
   mode: "supabase",
+  dbSchema: "app",
   plannerStateScope: "household",
   autosaveSeconds: 60
 };
