@@ -1,134 +1,196 @@
-/* King Family Travel Planner v7.2.2 Dashboard Repair
-   Non-invasive hotfix for the dashboard tab after Supabase login.
-   It replaces the dashboard render-repair notice, including the known `masked is not defined` failure.
+/* King Family Travel Planner v7.2.3 Dashboard Repair
+   Simple ES5-style dashboard fallback for GitHub Pages branch deployment.
+   It removes the known dashboard render notice and inserts a safe dashboard summary.
 */
 (function(){
   'use strict';
-  const PATCH_ID='kftpDashRepair';
-  function esc(s){return String(s??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-  function firstArray(state,names){for(const n of names){if(Array.isArray(state[n]))return state[n];}return [];}
-  function findDashTab(){
-    let el=document.getElementById('dash') || document.getElementById('dashboard') || document.querySelector('.tab[data-tab="dash"],.tab[data-id="dash"],[data-tab-panel="dash"]');
-    if(el) return el;
-    const btn=[...document.querySelectorAll('[data-tab]')].find(b=>String(b.dataset.tab||'').toLowerCase()==='dash' || /dashboard/i.test(b.textContent||''));
-    if(btn && btn.dataset.tab) return document.getElementById(btn.dataset.tab) || document.querySelector(`.tab[data-tab="${CSS.escape(btn.dataset.tab)}"]`);
-    return null;
-  }
-  function getState(){return (window.KFTP && window.KFTP.state) || {};}
-  function formatMoney(n){const x=Number(n||0);return x?x.toLocaleString(undefined,{style:'currency',currency:'USD',maximumFractionDigits:0}):'$0';}
-  function pickName(x){return x?.name || x?.title || x?.destination || x?.tripName || x?.label || x?.id || 'Untitled';}
-  function nextTrip(trips){
-    if(!trips.length) return null;
-    const now=new Date();
-    const scored=trips.map(t=>{
-      const raw=t.startDate||t.start_date||t.departDate||t.departureDate||t.date||t.from;
-      const d=raw?new Date(raw):null;
-      return {t,d,score:d&&!isNaN(d)?Math.abs(d-now):Number.MAX_SAFE_INTEGER};
-    }).sort((a,b)=>a.score-b.score);
-    return scored[0].t;
-  }
-  function isRenderRepairNotice(tab){
-    const text=(tab&&tab.textContent||'').toLowerCase();
-    return text.includes('planner render repair notice') || text.includes('masked is not defined') || text.includes('app hit a render issue');
-  }
-  function hasOriginalDashboardContent(tab){
-    if(!tab) return false;
-    if(isRenderRepairNotice(tab)) return false;
-    const repair=tab.querySelector('#'+PATCH_ID);
-    const cards=[...tab.querySelectorAll('.card,.table,.calendar,.statusGrid,.cards')].filter(x=>!repair||!repair.contains(x));
-    const text=(tab.textContent||'').replace(/Plan smarter family travel\.?/i,'').trim();
-    return cards.length>0 || text.length>180;
-  }
-  function cleanBadRenderNotice(tab){
-    if(!tab || !isRenderRepairNotice(tab)) return;
-    const hero=tab.querySelector('.hero');
-    [...tab.children].forEach(child=>{
-      if(child!==hero && child.id!==PATCH_ID) child.remove();
+  var PATCH_ID = 'kftpDashRepair';
+
+  function escapeHtml(value){
+    return String(value == null ? '' : value).replace(/[&<>\"]/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
     });
   }
-  function buildHtml(){
-    const s=getState();
-    const trips=firstArray(s,['trips','tripPlans','bookings','tripBookings','plannedTrips']);
-    const destinations=firstArray(s,['destinations','destinationIdeas','bucketList']);
-    const profiles=firstArray(s,['familyProfiles','profiles','people']);
-    const pets=firstArray(s,['pets','dogProfiles']);
-    const loyalty=firstArray(s,['loyaltyAccounts','loyaltyCards','loyaltyPrograms','airlineAwards']);
-    const deals=firstArray(s,['deals','travelDeals']);
-    const t=nextTrip(trips);
-    const activeTrip=t?pickName(t):'No active trip selected yet';
-    const tripDate=t?(t.startDate||t.start_date||t.departDate||t.departureDate||t.date||'Dates pending'):'Dates pending';
-    const estBudget=t?(t.budget||t.totalBudget||t.estimatedCost||t.totalCost||0):0;
-    return `
-      <div id="${PATCH_ID}" class="kftpDashRepair">
-        <div class="section between"><div><h2>Dashboard Overview</h2><p class="muted">Supabase login is active. Dashboard content has been restored from the current planner state while the original dashboard renderer is being stabilized.</p></div><div class="row"><button class="btn sm ghost" id="kftpDashAssetBtn">Run Asset Check</button><button class="btn sm primary" id="kftpDashSaveBtn">Save to Supabase</button></div></div>
-        <div class="grid four">
-          <div class="card stat"><div class="muted small">Trips / bookings</div><div class="num">${trips.length}</div><p class="muted">Tracked trip records.</p></div>
-          <div class="card stat"><div class="muted small">Destinations</div><div class="num">${destinations.length}</div><p class="muted">Bucket-list and research locations.</p></div>
-          <div class="card stat"><div class="muted small">Family profiles</div><div class="num">${profiles.length}</div><p class="muted">People in planner state.</p></div>
-          <div class="card stat"><div class="muted small">Loyalty / awards</div><div class="num">${loyalty.length}</div><p class="muted">Cards, programs, and award records.</p></div>
-        </div>
-        <div class="grid three" style="margin-top:16px">
-          <div class="card"><h3>Next / active trip</h3><p><b>${esc(activeTrip)}</b></p><p class="muted">${esc(tripDate)}</p><p class="muted">Estimated budget: <b>${formatMoney(estBudget)}</b></p><button class="btn sm ghost" data-kftp-open-tab="trips">Open Trips & Bookings</button></div>
-          <div class="card"><h3>Family readiness</h3><p class="muted">Profiles: <b>${profiles.length}</b></p><p class="muted">Pets / dog-care profiles: <b>${pets.length}</b></p><p class="muted">Deals tracked: <b>${deals.length}</b></p><button class="btn sm ghost" data-kftp-open-tab="family">Open Family</button></div>
-          <div class="card"><h3>Supabase readiness</h3><p class="muted">Use the cloud bar <b>Save</b>, <b>Load</b>, and <b>Assets</b> buttons to validate the secure backend.</p><p class="muted small">Local storage is cache only; Supabase Auth and app.app_users control access.</p></div>
-        </div>
-      </div>`;
+
+  function getState(){
+    try { return (window.KFTP && window.KFTP.state) || {}; }
+    catch(e){ return {}; }
   }
+
+  function firstArray(state, names){
+    for(var i=0;i<names.length;i++){
+      if(Array.isArray(state[names[i]])) return state[names[i]];
+    }
+    return [];
+  }
+
+  function findDashTab(){
+    var el = document.getElementById('dash') || document.getElementById('dashboard');
+    if(el) return el;
+    var panels = document.querySelectorAll('.tab,[data-tab-panel]');
+    for(var i=0;i<panels.length;i++){
+      var id = (panels[i].id || '').toLowerCase();
+      var dt = (panels[i].getAttribute('data-tab') || panels[i].getAttribute('data-id') || panels[i].getAttribute('data-tab-panel') || '').toLowerCase();
+      if(id === 'dash' || id === 'dashboard' || dt === 'dash' || dt === 'dashboard') return panels[i];
+    }
+    return null;
+  }
+
+  function pickName(item){
+    if(!item) return 'Untitled';
+    return item.name || item.title || item.destination || item.tripName || item.label || item.id || 'Untitled';
+  }
+
+  function nextTrip(trips){
+    if(!trips || !trips.length) return null;
+    var best = trips[0];
+    var bestScore = Number.MAX_SAFE_INTEGER || 9007199254740991;
+    var now = new Date().getTime();
+    for(var i=0;i<trips.length;i++){
+      var t = trips[i];
+      var raw = t.startDate || t.start_date || t.departDate || t.departureDate || t.date || t.from;
+      var d = raw ? new Date(raw).getTime() : NaN;
+      var score = !isNaN(d) ? Math.abs(d - now) : bestScore;
+      if(score <= bestScore){ bestScore = score; best = t; }
+    }
+    return best;
+  }
+
+  function money(value){
+    var n = Number(value || 0);
+    if(!n) return '$0';
+    try { return n.toLocaleString(undefined,{style:'currency',currency:'USD',maximumFractionDigits:0}); }
+    catch(e){ return '$' + Math.round(n); }
+  }
+
+  function isRenderRepairNotice(tab){
+    var text = String(tab && tab.textContent || '').toLowerCase();
+    return text.indexOf('planner render repair notice') >= 0 ||
+           text.indexOf('masked is not defined') >= 0 ||
+           text.indexOf('app hit a render issue') >= 0;
+  }
+
+  function hasUsefulDashboardContent(tab){
+    if(!tab) return false;
+    if(isRenderRepairNotice(tab)) return false;
+    var repair = tab.querySelector('#' + PATCH_ID);
+    var blocks = tab.querySelectorAll('.card,.table,.calendar,.statusGrid,.cards');
+    for(var i=0;i<blocks.length;i++){
+      if(!repair || !repair.contains(blocks[i])) return true;
+    }
+    var text = String(tab.textContent || '').replace(/Plan smarter family travel\.?/i,'').trim();
+    return text.length > 180;
+  }
+
+  function cleanBadRenderNotice(tab){
+    if(!tab || !isRenderRepairNotice(tab)) return;
+    var hero = tab.querySelector('.hero');
+    var children = Array.prototype.slice.call(tab.children);
+    for(var i=0;i<children.length;i++){
+      var child = children[i];
+      if(child !== hero && child.id !== PATCH_ID) child.parentNode.removeChild(child);
+    }
+  }
+
+  function buildDashboardHtml(){
+    var state = getState();
+    var trips = firstArray(state, ['trips','tripPlans','bookings','tripBookings','plannedTrips']);
+    var destinations = firstArray(state, ['destinations','destinationIdeas','bucketList']);
+    var profiles = firstArray(state, ['familyProfiles','profiles','people']);
+    var pets = firstArray(state, ['pets','dogProfiles']);
+    var loyalty = firstArray(state, ['loyaltyAccounts','loyaltyCards','loyaltyPrograms','airlineAwards']);
+    var deals = firstArray(state, ['deals','travelDeals']);
+    var trip = nextTrip(trips);
+    var activeTrip = trip ? pickName(trip) : 'No active trip selected yet';
+    var tripDate = trip ? (trip.startDate || trip.start_date || trip.departDate || trip.departureDate || trip.date || 'Dates pending') : 'Dates pending';
+    var estBudget = trip ? (trip.budget || trip.totalBudget || trip.estimatedCost || trip.totalCost || 0) : 0;
+
+    return '' +
+      '<div id="' + PATCH_ID + '" class="kftpDashRepair">' +
+      '<div class="section between"><div><h2>Dashboard Overview</h2><p class="muted">Supabase login is active. Dashboard content has been restored from the current planner state while the original dashboard renderer is stabilized.</p></div><div class="row"><button class="btn sm ghost" id="kftpDashAssetBtn">Run Asset Check</button><button class="btn sm primary" id="kftpDashSaveBtn">Save to Supabase</button></div></div>' +
+      '<div class="grid four">' +
+      '<div class="card stat"><div class="muted small">Trips / bookings</div><div class="num">' + trips.length + '</div><p class="muted">Tracked trip records.</p></div>' +
+      '<div class="card stat"><div class="muted small">Destinations</div><div class="num">' + destinations.length + '</div><p class="muted">Bucket-list and research locations.</p></div>' +
+      '<div class="card stat"><div class="muted small">Family profiles</div><div class="num">' + profiles.length + '</div><p class="muted">People in planner state.</p></div>' +
+      '<div class="card stat"><div class="muted small">Loyalty / awards</div><div class="num">' + loyalty.length + '</div><p class="muted">Cards, programs, and award records.</p></div>' +
+      '</div>' +
+      '<div class="grid three" style="margin-top:16px">' +
+      '<div class="card"><h3>Next / active trip</h3><p><b>' + escapeHtml(activeTrip) + '</b></p><p class="muted">' + escapeHtml(tripDate) + '</p><p class="muted">Estimated budget: <b>' + money(estBudget) + '</b></p><button class="btn sm ghost" data-kftp-open-tab="trips">Open Trips & Bookings</button></div>' +
+      '<div class="card"><h3>Family readiness</h3><p class="muted">Profiles: <b>' + profiles.length + '</b></p><p class="muted">Pets / dog-care profiles: <b>' + pets.length + '</b></p><p class="muted">Deals tracked: <b>' + deals.length + '</b></p><button class="btn sm ghost" data-kftp-open-tab="family">Open Family</button></div>' +
+      '<div class="card"><h3>Supabase readiness</h3><p class="muted">Use the cloud bar <b>Save</b>, <b>Load</b>, and <b>Assets</b> buttons to validate the secure backend.</p><p class="muted small">Local storage is cache only; Supabase Auth and app.app_users control access.</p></div>' +
+      '</div>' +
+      '</div>';
+  }
+
   function wireButtons(root){
-    const asset=root.querySelector('#kftpDashAssetBtn');
-    if(asset) asset.onclick=()=>{
-      if(window.KFTP_SUPABASE && typeof window.KFTP_SUPABASE.runAssetDiagnostics==='function') window.KFTP_SUPABASE.runAssetDiagnostics();
-      else alert('Asset diagnostics are not loaded yet. Use the Assets button in the Supabase cloud bar.');
-    };
-    const save=root.querySelector('#kftpDashSaveBtn');
-    if(save) save.onclick=()=>{
-      if(window.KFTP_SUPABASE && typeof window.KFTP_SUPABASE.savePlannerState==='function') window.KFTP_SUPABASE.savePlannerState(true);
-      else alert('Supabase bridge is not ready yet.');
-    };
-    root.querySelectorAll('[data-kftp-open-tab]').forEach(btn=>{
-      btn.onclick=()=>{
-        const id=btn.getAttribute('data-kftp-open-tab');
-        if(window.KFTP && typeof window.KFTP.switchTab==='function') window.KFTP.switchTab(id);
+    var asset = root.querySelector('#kftpDashAssetBtn');
+    if(asset){
+      asset.onclick = function(){
+        if(window.KFTP_SUPABASE && typeof window.KFTP_SUPABASE.runAssetDiagnostics === 'function') window.KFTP_SUPABASE.runAssetDiagnostics();
+        else alert('Asset diagnostics are not loaded yet. Use the Assets button in the Supabase cloud bar.');
+      };
+    }
+    var save = root.querySelector('#kftpDashSaveBtn');
+    if(save){
+      save.onclick = function(){
+        if(window.KFTP_SUPABASE && typeof window.KFTP_SUPABASE.savePlannerState === 'function') window.KFTP_SUPABASE.savePlannerState(true);
+        else alert('Supabase bridge is not ready yet.');
+      };
+    }
+    var openers = root.querySelectorAll('[data-kftp-open-tab]');
+    for(var i=0;i<openers.length;i++){
+      openers[i].onclick = function(){
+        var id = this.getAttribute('data-kftp-open-tab');
+        if(window.KFTP && typeof window.KFTP.switchTab === 'function') window.KFTP.switchTab(id);
         else {
-          const nav=document.querySelector(`[data-tab="${CSS.escape(id)}"]`);
+          var nav = document.querySelector('[data-tab="' + id + '"]');
           if(nav) nav.click();
         }
       };
-    });
+    }
   }
+
   function patchDashboard(force){
-    const tab=findDashTab();
+    var tab = findDashTab();
     if(!tab) return false;
     cleanBadRenderNotice(tab);
-    if(hasOriginalDashboardContent(tab) && !force) return true;
-    let existing=tab.querySelector('#'+PATCH_ID);
-    if(!existing){
-      const hero=tab.querySelector('.hero');
-      if(hero) hero.insertAdjacentHTML('afterend',buildHtml());
-      else tab.insertAdjacentHTML('afterbegin',buildHtml());
-      existing=tab.querySelector('#'+PATCH_ID);
+    if(hasUsefulDashboardContent(tab) && !force) return true;
+    var existing = tab.querySelector('#' + PATCH_ID);
+    if(existing){
+      existing.outerHTML = buildDashboardHtml();
     }else{
-      existing.outerHTML=buildHtml();
-      existing=tab.querySelector('#'+PATCH_ID);
+      var hero = tab.querySelector('.hero');
+      if(hero) hero.insertAdjacentHTML('afterend', buildDashboardHtml());
+      else tab.insertAdjacentHTML('afterbegin', buildDashboardHtml());
     }
+    existing = tab.querySelector('#' + PATCH_ID);
     if(existing) wireButtons(existing);
     return true;
   }
+
   function schedule(){
-    let tries=0;
-    const timer=setInterval(()=>{
-      tries++;
+    var tries = 0;
+    var timer = setInterval(function(){
+      tries += 1;
       patchDashboard(false);
-      if(tries>40) clearInterval(timer);
-    },300);
-    setTimeout(()=>patchDashboard(false),100);
-    setTimeout(()=>patchDashboard(true),1200);
-    setTimeout(()=>patchDashboard(false),2500);
-    document.addEventListener('click',e=>{
-      if(e.target.closest && e.target.closest('[data-tab]')) setTimeout(()=>patchDashboard(false),80);
+      if(tries > 40) clearInterval(timer);
+    }, 300);
+    setTimeout(function(){patchDashboard(false);}, 100);
+    setTimeout(function(){patchDashboard(true);}, 1200);
+    setTimeout(function(){patchDashboard(false);}, 2500);
+    document.addEventListener('click', function(e){
+      var target = e.target;
+      while(target && target !== document){
+        if(target.getAttribute && target.getAttribute('data-tab')){
+          setTimeout(function(){patchDashboard(false);}, 80);
+          break;
+        }
+        target = target.parentNode;
+      }
     });
-    window.addEventListener('storage',()=>setTimeout(()=>patchDashboard(true),120));
   }
-  window.KFTP_DASH_REPAIR={patchDashboard};
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',schedule); else schedule();
+
+  window.KFTP_DASH_REPAIR = { patchDashboard: patchDashboard };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule);
+  else schedule();
 })();
