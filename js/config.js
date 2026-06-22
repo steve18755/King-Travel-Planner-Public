@@ -7,49 +7,86 @@
 
   const AUTH_SESSION_KEY = 'kftp_v31_auth_session';
   const SUPABASE_AUTH_KEY = 'sb-vguuedcyfzgqbaakhurg-auth-token';
+  let topLogoutInProgress = false;
 
   function clearBrowserLogin(){
     try{
       localStorage.removeItem(AUTH_SESSION_KEY);
       localStorage.removeItem(SUPABASE_AUTH_KEY);
     }catch(e){}
-    try{
-      sessionStorage.setItem('kftp_signed_out','1');
-    }catch(e){}
   }
 
-  async function realLogout(){
+  async function fallbackLogout(){
     clearBrowserLogin();
     try{
+      if(window.KFTP_SUPABASE && typeof window.KFTP_SUPABASE.signOut === 'function'){
+        await window.KFTP_SUPABASE.signOut();
+        return;
+      }
       if(window.KFTP_SUPABASE && window.KFTP_SUPABASE.client && window.KFTP_SUPABASE.client.auth){
         await window.KFTP_SUPABASE.client.auth.signOut();
       }
     }catch(e){}
     clearBrowserLogin();
-    const url = new URL(window.location.href);
-    url.hash = '';
-    url.searchParams.set('signedout', Date.now().toString());
-    window.location.replace(url.toString());
+    window.location.reload();
   }
 
-  // If the user intentionally signed out, keep the page from auto-restoring the prior session.
-  if(new URL(window.location.href).searchParams.has('signedout')){
-    clearBrowserLogin();
+  function useBottomSupabaseSignout(){
+    if(topLogoutInProgress) return;
+    topLogoutInProgress = true;
+
+    // The bottom-right Supabase Sign out already works correctly. Route the top bar's
+    // Logout / Switch User through that same handler instead of the older local handler.
+    setTimeout(function(){
+      const bottom = document.getElementById('sbOut');
+      if(bottom && typeof bottom.click === 'function'){
+        bottom.click();
+        return;
+      }
+      fallbackLogout();
+    }, 0);
   }
 
-  // Capture all top-bar and cloud-bar logout/switch controls before older inline handlers run.
-  document.addEventListener('click', function(e){
-    const el = e.target && e.target.closest ? e.target.closest('button,a') : null;
-    if(!el) return;
-    const txt = (el.textContent || '').trim().toLowerCase();
+  function isTopLogoutControl(target){
+    const el = target && target.closest ? target.closest('button,a,[role="button"],input') : null;
+    if(!el) return false;
+    const txt = ((el.textContent || el.value || '') + '').trim().toLowerCase();
     const id = el.id || '';
-    if(id === 'topLogoutBtn' || id === 'topSwitchUserBtn' || id === 'sbOut' || txt === 'logout' || txt === 'switch user' || txt === 'sign out'){
-      e.preventDefault();
-      e.stopPropagation();
-      if(e.stopImmediatePropagation) e.stopImmediatePropagation();
-      realLogout();
-    }
-  }, true);
+    const inTopBar = !!(el.closest && (el.closest('#topUserBar') || el.closest('.topUserBar')));
+    return inTopBar && (id === 'topLogoutBtn' || id === 'topSwitchUserBtn' || txt === 'logout' || txt === 'switch user');
+  }
+
+  function captureTopLogout(e){
+    if(!isTopLogoutControl(e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if(e.stopImmediatePropagation) e.stopImmediatePropagation();
+    useBottomSupabaseSignout();
+  }
+
+  // Capture before older inline/local handlers get the event.
+  ['pointerdown','mousedown','touchstart','click'].forEach(function(evt){
+    document.addEventListener(evt, captureTopLogout, true);
+  });
+
+  // Also overwrite the top buttons directly after they appear. This covers handlers
+  // attached with onclick/onmousedown on the old user bar.
+  function bindTopButtons(){
+    const nodes = document.querySelectorAll('#topUserBar button, .topUserBar button, #topUserBar a, .topUserBar a');
+    nodes.forEach(function(el){
+      const txt = ((el.textContent || el.value || '') + '').trim().toLowerCase();
+      if(el.id === 'topLogoutBtn' || el.id === 'topSwitchUserBtn' || txt === 'logout' || txt === 'switch user'){
+        el.onclick = function(ev){ if(ev){ev.preventDefault(); ev.stopPropagation();} useBottomSupabaseSignout(); return false; };
+        el.onmousedown = el.onclick;
+        el.onpointerdown = el.onclick;
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    bindTopButtons();
+    setInterval(bindTopButtons, 500);
+  });
 })();
 
 window.KFTP_CONFIG = {
